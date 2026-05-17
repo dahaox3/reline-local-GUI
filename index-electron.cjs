@@ -329,7 +329,7 @@ ipcMain.handle("install-updates", async (event) => {
         log("📦 Updating...");
         console.log("Installing:", ["pip", "install", "--upgrade", relineForkPackage, "resselt[cu126]"]);
         await runCommand(uvBinaryPath, [
-            "pip", "install", "--upgrade",
+            "pip", "install", "--upgrade", "--force-reinstall",
             "--index-url", "https://pypi.org/simple",
             "--extra-index-url", "https://download.pytorch.org/whl/cu126",
             relineForkPackage, "resselt[cu126]"
@@ -381,7 +381,7 @@ ipcMain.handle("install-dependency", async (event, id) => {
 
         if (id === "reline") {
             log("📦 Installing reline...");
-            await runCommand(uvBinaryPath, [...pipArgs, relineForkPackage], { cwd: relineDir }, log);
+            await runCommand(uvBinaryPath, [...pipArgs, "--upgrade", "--force-reinstall", relineForkPackage], { cwd: relineDir }, log);
             return;
         }
 
