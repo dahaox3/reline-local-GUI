@@ -17,6 +17,7 @@ let currentChild = null;
 let manuallyStopped = false;
 let serverChild = null;
 let serverPort = 5678;
+let serverHost = "127.0.0.1";
 
 // ==== Helpers ====
 function runCommand(command, args = [], options = {}, onData = () => {}) {
@@ -634,9 +635,9 @@ ipcMain.handle("stop-python-pipeline", () => {
     }
 });
 
-ipcMain.handle("start-reline-server", async (event, { jsonData, port = 5678 }) => {
+ipcMain.handle("start-reline-server", async (event, { jsonData, host = "127.0.0.1", port = 5678 }) => {
     if (serverChild) {
-        return { started: true, port: serverPort, alreadyRunning: true };
+        return { started: true, host: serverHost, port: serverPort, alreadyRunning: true };
     }
 
     const configPath = path.join(relineDir, "server_config.json");
@@ -647,9 +648,10 @@ ipcMain.handle("start-reline-server", async (event, { jsonData, port = 5678 }) =
         ? path.join(venvPath, "Scripts", "python.exe")
         : path.join(venvPath, "bin", "python");
     const scriptPath = path.join(relineDir, "server.py");
+    serverHost = String(host || "127.0.0.1");
     serverPort = Number(port) || 5678;
 
-    serverChild = spawn(pythonPath, [scriptPath, "--host", "127.0.0.1", "--port", String(serverPort)], {
+    serverChild = spawn(pythonPath, [scriptPath, "--host", serverHost, "--port", String(serverPort)], {
         cwd: relineDir,
         windowsHide: true,
         shell: false,
@@ -663,7 +665,7 @@ ipcMain.handle("start-reline-server", async (event, { jsonData, port = 5678 }) =
         serverChild = null;
     });
 
-    return { started: true, port: serverPort };
+    return { started: true, host: serverHost, port: serverPort };
 });
 
 ipcMain.handle("stop-reline-server", () => {
@@ -676,6 +678,7 @@ ipcMain.handle("stop-reline-server", () => {
 
 ipcMain.handle("get-reline-server-state", () => ({
     running: !!serverChild,
+    host: serverHost,
     port: serverPort,
 }));
 

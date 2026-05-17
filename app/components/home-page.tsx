@@ -39,6 +39,10 @@ export default function HomePage() {
         return localStorage.getItem("reline_current_config") || ""
     })
     const [serverRunning, setServerRunning] = useState(false)
+    const [serverHost, setServerHost] = useState(() => {
+        if (typeof window === "undefined") return "127.0.0.1"
+        return localStorage.getItem("reline_server_host") || "127.0.0.1"
+    })
     const [serverPort, setServerPort] = useState(() => {
         if (typeof window === "undefined") return 5678
         return Number(localStorage.getItem("reline_server_port") || "5678")
@@ -67,6 +71,7 @@ export default function HomePage() {
         checkDependencies()
         window.electronAPI.getRelineServerState?.().then((state) => {
             setServerRunning(state.running)
+            setServerHost(state.host || "127.0.0.1")
             setServerPort(state.port || 5678)
         }).catch(() => {})
     }, [])
@@ -251,11 +256,13 @@ export default function HomePage() {
                 return
             }
             const json = JSON.parse(nodesToString(nodes))
-            const result = await window.electronAPI.startRelineServer({jsonData: json, port: serverPort})
+            const result = await window.electronAPI.startRelineServer({jsonData: json, host: serverHost, port: serverPort})
+            localStorage.setItem("reline_server_host", result.host)
             localStorage.setItem("reline_server_port", String(result.port))
+            setServerHost(result.host)
             setServerPort(result.port)
             setServerRunning(true)
-            toast.success(`Reline service running on 127.0.0.1:${result.port}`)
+            toast.success(`Reline API running on ${result.host}:${result.port}`)
         } catch (err) {
             console.error(err)
             toast.error("Failed to toggle Reline service")
@@ -432,6 +439,18 @@ export default function HomePage() {
                             </div>
 
                             <div className="flex items-center gap-2">
+                                <div className="text-muted-foreground text-sm">API</div>
+                                <Input
+                                    className="w-32 h-9"
+                                    value={serverHost}
+                                    placeholder="127.0.0.1"
+                                    onChange={(event) => {
+                                        const host = event.target.value
+                                        setServerHost(host)
+                                        localStorage.setItem("reline_server_host", host)
+                                    }}
+                                    disabled={serverRunning}
+                                />
                                 <Input
                                     type="number"
                                     min={1}
@@ -450,7 +469,7 @@ export default function HomePage() {
                                         <Button
                                             variant="outline"
                                             size="icon"
-                                            title={serverRunning ? "Stop service mode" : "Start service mode"}
+                                            title={serverRunning ? `Stop API (${serverHost}:${serverPort})` : "Start API"}
                                             className={cn(
                                                 serverRunning &&
                                                 "border-green-500 text-green-600 bg-green-500/10 hover:bg-green-500/20",
@@ -461,7 +480,7 @@ export default function HomePage() {
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                        <p>{serverRunning ? "Stop service mode" : "Start service mode"}</p>
+                                        <p>{serverRunning ? `Stop API at ${serverHost}:${serverPort}` : "Start API service"}</p>
                                     </TooltipContent>
                                 </Tooltip>
                                 <div className="text-muted-foreground text-sm">v1.1.0</div>
