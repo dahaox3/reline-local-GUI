@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import copy
 import gc
+import logging
 import os
 import shutil
 import uuid
@@ -75,6 +76,7 @@ except ImportError:
 BASE_DIR = Path(__file__).parent.resolve()
 CONFIG_PATH = BASE_DIR / 'server_config.json'
 TMP_ROOT = BASE_DIR / 'tmp' / 'server'
+logger = logging.getLogger('reline.server')
 
 app = FastAPI(title='Reline Local API')
 queue_lock = asyncio.Lock()
@@ -138,6 +140,8 @@ def validate_server_config(config: list[dict[str, Any]]) -> int:
     upscale_index = upscale_indexes[0]
     if not reader_index < upscale_index < writer_index:
         raise ConfigError('Server config requires folder_reader -> upscale -> folder_writer order')
+    if writer_index != len(config) - 1:
+        logger.warning('folder_writer is not the last node; server mode will run later nodes before writing output')
     return upscale_index
 
 
@@ -278,7 +282,7 @@ def run_single_image(
     if color_detect_mode:
         node.update_options(replace(node.options, color_detect_mode=color_detect_mode))
     img: ImageFile | None = None
-    writer_seen = False
+    writer_node: FolderWriterNode | FileWriterNode | None = None
 
     try:
         for i, node_data in enumerate(request_config):
@@ -300,11 +304,7 @@ def run_single_image(
                 if img.is_color is None:
                     img.is_color = detect_image_color(img.data).is_color
             elif isinstance(runtime_node, FolderWriterNode | FileWriterNode):
-                if img is None:
-                    raise ConfigError('Writer node did not receive an image')
-                runtime_node.single_process(img)
-                writer_seen = True
-                break
+                writer_node = runtime_node
             else:
                 if img is None:
                     raise ConfigError(f'{node_type} node did not receive an image')
@@ -312,8 +312,11 @@ def run_single_image(
                 if img is None:
                     raise RuntimeError(f'{node_type} node skipped the image')
 
-        if not writer_seen:
+        if writer_node is None:
             raise ConfigError('Server config did not write an output image')
+        if img is None:
+            raise ConfigError('Writer node did not receive an image')
+        writer_node.single_process(img)
         return collect_result(img, node)
     finally:
         if node.options is not old_upscale_options:
