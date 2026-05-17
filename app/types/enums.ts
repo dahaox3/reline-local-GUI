@@ -1,4 +1,5 @@
 export enum ReaderNodeMode {
+  DYNAMIC = "dynamic",
   RGB = "rgb",
   GRAY = "gray",
 }
@@ -93,6 +94,12 @@ export enum DType {
   F32 = "F32",
   F16 = "F16",
   BF16 = "BF16",
+}
+
+export enum ColorDetectMode {
+  AUTO = "auto",
+  FORCE_COLOR = "force_color",
+  FORCE_GRAY = "force_gray",
 }
 
 export enum HalftoneMode {

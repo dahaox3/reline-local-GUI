@@ -11,6 +11,7 @@ const isDev = !app.isPackaged;
 const relineDir = path.join(__dirname, "reline");
 const uvBinDir = path.join(relineDir, "uv");
 const uvBinaryPath = path.join(uvBinDir, os.platform() === "win32" ? "uv.exe" : "uv");
+const relineForkPackage = "git+https://github.com/dahaox3/reline.git";
 
 let currentChild = null;
 let manuallyStopped = false;
@@ -326,12 +327,12 @@ ipcMain.handle("install-updates", async (event) => {
     const log = (data) => event.sender.send("pipeline-output", data);
     try {
         log("📦 Updating...");
-        console.log("Installing:", ["pip", "install", "--upgrade", "reline", "resselt[cu126]"]);
+        console.log("Installing:", ["pip", "install", "--upgrade", relineForkPackage, "resselt[cu126]"]);
         await runCommand(uvBinaryPath, [
             "pip", "install", "--upgrade",
             "--index-url", "https://pypi.org/simple",
             "--extra-index-url", "https://download.pytorch.org/whl/cu126",
-            "reline", "resselt[cu126]"
+            relineForkPackage, "resselt[cu126]"
         ], { cwd: relineDir }, log);
         log("✅ Updates installed successfully");
     } catch (err) {
@@ -380,7 +381,7 @@ ipcMain.handle("install-dependency", async (event, id) => {
 
         if (id === "reline") {
             log("📦 Installing reline...");
-            await runCommand(uvBinaryPath, [...pipArgs, "reline"], { cwd: relineDir }, log);
+            await runCommand(uvBinaryPath, [...pipArgs, relineForkPackage], { cwd: relineDir }, log);
             return;
         }
 

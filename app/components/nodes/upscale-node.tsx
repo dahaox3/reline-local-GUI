@@ -1,7 +1,7 @@
 import {useContext, useEffect, useState} from "react"
 import {NodesContext, NodesDispatchContext} from "~/context/contexts"
 import {ModelsContext, useSetModels, useModels} from "~/context/model-provider"
-import {DType, TilerType} from "~/types/enums"
+import {ColorDetectMode, DType, TilerType} from "~/types/enums"
 import {Label} from "../ui/label"
 import {DEFAULT_MODEL, DEFAULT_TILE_SIZE} from "~/constants"
 import {Popover, PopoverContent, PopoverTrigger} from "../ui/popover"
@@ -17,12 +17,12 @@ import {NodesActionType} from "~/types/actions"
 import {FolderOpen, File} from "lucide-react"
 
 
-function Combobox({value, onChange}: { value: string; onChange: (value: string) => void }) {
+function Combobox({value, onChange, placeholder = "Select model"}: { value: string; onChange: (value: string) => void; placeholder?: string }) {
     const [open, setOpen] = useState(false);
     const {models} = useModels();
 
-    const displayValue = value === "select folder" ? "Select folder" : value;
-    const isPlaceholder = value === "select folder";
+    const displayValue = !value || value === "select folder" ? placeholder : value;
+    const isPlaceholder = !value || value === "select folder";
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -80,14 +80,17 @@ export function UpscaleNodeBody({id}: { id: number }) {
     }
     const options = node.options as UpscaleNodeOptions
     const dispatch = useContext(NodesDispatchContext)
-    const {folderPath, models} = useContext(ModelsContext)
+    const {models} = useContext(ModelsContext)
     const setModels = useSetModels()
 
     useEffect(() => {
-        if (options.model === "select folder" && models.length > 0 && !options.is_own_model) {
+        if (!options.auto_detect_color && options.model === "select folder" && models.length > 0 && !options.is_own_model) {
             changeValue({model: models[0]});
         }
-    }, [models, options.model, options.is_own_model]);
+        if (options.auto_detect_color && !options.gray_model && models.length > 0) {
+            changeValue({gray_model: options.model && options.model !== DEFAULT_MODEL ? options.model : models[0]});
+        }
+    }, [models, options.model, options.is_own_model, options.auto_detect_color, options.gray_model]);
 
 
     const handleChooseFolder = async () => {
@@ -95,7 +98,11 @@ export function UpscaleNodeBody({id}: { id: number }) {
         if (result && Array.isArray(result.models)) {
             setModels({folderPath: result.folderPath, models: result.models});
             const defaultModel = result.models[0] || "select folder";
-            changeValue({model: defaultModel});
+            if (options.auto_detect_color) {
+                changeValue({gray_model: options.gray_model || defaultModel});
+            } else {
+                changeValue({model: defaultModel});
+            }
         }
     };
 
@@ -121,45 +128,136 @@ export function UpscaleNodeBody({id}: { id: number }) {
 
     return (
         <div className="flex flex-col gap-5">
+            <div className="flex items-center space-x-2">
+                <Checkbox
+                    checked={!!options.auto_detect_color}
+                    onCheckedChange={(value) => {
+                        const enabled = !!value;
+                        const grayModel = options.gray_model || (options.model && options.model !== DEFAULT_MODEL ? options.model : models[0] || "");
+                        changeValue({
+                            auto_detect_color: enabled,
+                            gray_model: enabled ? grayModel : options.gray_model,
+                            color_model: options.color_model || "",
+                            color_detect_mode: options.color_detect_mode || ColorDetectMode.AUTO,
+                        })
+                    }}
+                />
+                <Label>auto detect color</Label>
+            </div>
+
             <div className="flex flex-col gap-2">
-                <Label>Model</Label>
-                {options.is_own_model ? (
-                    <div className="flex items-center gap-2">
-                        <Input
-                            placeholder="Path/to/model"
-                            value={options.model}
-                            onChange={(e) => {
-                                changeValue({model: e.target.value})
-                            }}
-                        />
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            type="button"
-                            title="Select file"
-                            onClick={() => handleChooseFile(changeValue)}
-                        >
-                            <File/>
-                        </Button>
+                {options.auto_detect_color ? (
+                    <div className="flex flex-col gap-5">
+                        <div className="flex flex-col gap-2">
+                            <Label>Color detect mode</Label>
+                            <Select
+                                onValueChange={(value: ColorDetectMode) => changeValue({color_detect_mode: value})}
+                                value={options.color_detect_mode || ColorDetectMode.AUTO}
+                            >
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {Object.values(ColorDetectMode).map((mode) => {
+                                            return (
+                                                <SelectItem key={mode} value={mode}>
+                                                    {mode}
+                                                </SelectItem>
+                                            )
+                                        })}
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Label>Gray model</Label>
+                            <div className="flex items-center gap-2">
+                                <Combobox
+                                    value={options.gray_model || ""}
+                                    placeholder="Select gray model"
+                                    onChange={(model) => {
+                                        changeValue({gray_model: model});
+                                    }}
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    type="button"
+                                    title="Select folder"
+                                    onClick={handleChooseFolder}
+                                >
+                                    <FolderOpen/>
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Label>Color model</Label>
+                            <div className="flex items-center gap-2">
+                                <Combobox
+                                    value={options.color_model || ""}
+                                    placeholder="Use fallback model"
+                                    onChange={(model) => {
+                                        changeValue({color_model: model});
+                                    }}
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    type="button"
+                                    title="Select folder"
+                                    onClick={handleChooseFolder}
+                                >
+                                    <FolderOpen/>
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 ) : (
-                    <div className="flex items-center gap-2">
-                        <Combobox
-                            value={options.model}
-                            onChange={(model) => {
-                                changeValue({model});
-                            }}
-                        />
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            type="button"
-                            title="Select folder"
-                            onClick={handleChooseFolder}
-                        >
-                            <FolderOpen/>
-                        </Button>
-                    </div>
+                    <>
+                        <Label>Model</Label>
+                        {options.is_own_model ? (
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    placeholder="Path/to/model"
+                                    value={options.model}
+                                    onChange={(e) => {
+                                        changeValue({model: e.target.value})
+                                    }}
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    type="button"
+                                    title="Select file"
+                                    onClick={() => handleChooseFile(changeValue)}
+                                >
+                                    <File/>
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <Combobox
+                                    value={options.model}
+                                    placeholder="Select folder"
+                                    onChange={(model) => {
+                                        changeValue({model});
+                                    }}
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    type="button"
+                                    title="Select folder"
+                                    onClick={handleChooseFolder}
+                                >
+                                    <FolderOpen/>
+                                </Button>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
@@ -235,22 +333,24 @@ export function UpscaleNodeBody({id}: { id: number }) {
                 </Select>
             </div>
 
-            <div className="flex items-center space-x-2">
-                <Checkbox
-                    checked={options.is_own_model}
-                    onCheckedChange={(value) => {
-                        if (!value) {
-                            const selectedModel = models.includes(options.model)
-                                ? options.model
-                                : models[0] || "select folder";
-                            changeValue({model: selectedModel, is_own_model: value});
-                        } else {
-                            changeValue({model: "", is_own_model: !!value});
-                        }
-                    }}
-                />
-                <Label>from file</Label>
-            </div>
+            {!options.auto_detect_color && (
+                <div className="flex items-center space-x-2">
+                    <Checkbox
+                        checked={options.is_own_model}
+                        onCheckedChange={(value) => {
+                            if (!value) {
+                                const selectedModel = models.includes(options.model)
+                                    ? options.model
+                                    : models[0] || "select folder";
+                                changeValue({model: selectedModel, is_own_model: value});
+                            } else {
+                                changeValue({model: "", is_own_model: !!value});
+                            }
+                        }}
+                    />
+                    <Label>from file</Label>
+                </div>
+            )}
 
             <div className="flex items-center space-x-2">
                 <Checkbox

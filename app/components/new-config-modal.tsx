@@ -36,7 +36,7 @@ export function NewConfigModal({ open, onClose, folderPath, setCurrentFilePath }
                 "options": {
                     "path": "C:\\raws",
                     "recursive": false,
-                    "mode": "gray"
+                    "mode": "dynamic"
                 }
             },
             {
@@ -46,7 +46,11 @@ export function NewConfigModal({ open, onClose, folderPath, setCurrentFilePath }
                     "dtype": "F32",
                     "tiler": "exact",
                     "exact_tiler_size": 600,
-                    "allow_cpu_upscale": false
+                    "allow_cpu_upscale": false,
+                    "auto_detect_color": false,
+                    "color_model": "",
+                    "gray_model": "",
+                    "color_detect_mode": "auto"
                 }
             },
             {

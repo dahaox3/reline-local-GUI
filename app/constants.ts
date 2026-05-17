@@ -1,5 +1,6 @@
 import {
   CannyType,
+  ColorDetectMode,
   CvtType,
   DotType,
   DType, HalftoneMode,
@@ -45,7 +46,7 @@ export const DEFAULT_NODE_OPTIONS: {
   folder_reader: {
     path: "C:\\raws",
     recursive: true,
-    mode: ReaderNodeMode.RGB,
+    mode: ReaderNodeMode.DYNAMIC,
   },
   folder_writer: {
     path: "C:\\raws\\output",
@@ -70,6 +71,10 @@ export const DEFAULT_NODE_OPTIONS: {
     tiler: TilerType.EXACT,
     exact_tiler_size: DEFAULT_TILE_SIZE,
     allow_cpu_upscale: false,
+    auto_detect_color: false,
+    color_model: "",
+    gray_model: "",
+    color_detect_mode: ColorDetectMode.AUTO,
   },
   resize: {
     resize_type: ResizeType.BY_WIDTH,

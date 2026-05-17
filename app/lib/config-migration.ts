@@ -1,4 +1,4 @@
-import {DType, NodeType, ReaderNodeMode, ResizeFilterType} from "~/types/enums";
+import {ColorDetectMode, DType, NodeType, ReaderNodeMode, ResizeFilterType} from "~/types/enums";
 import type {StackNode} from "~/types/node";
 import {FolderReaderNodeOptions, ResizeNodeOptions, UpscaleNodeOptions} from "~/types/options";
 
@@ -39,7 +39,7 @@ export function migrateNodes(nodes: StackNode[]): StackNode[] {
                     ...node,
                     options: {
                         ...options,
-                        mode: ReaderNodeMode.RGB,
+                        mode: ReaderNodeMode.DYNAMIC,
                     },
                 };
             }
@@ -50,6 +50,11 @@ export function migrateNodes(nodes: StackNode[]): StackNode[] {
             let modelPath = options.model ?? "";
             let modelName = modelPath.split(/[\\/]/).pop() ?? "";
             let isOwn;
+            const normalizeModelName = (value?: string) => {
+                const rawValue = value ?? "";
+                const name = rawValue.split(/[\\/]/).pop() ?? "";
+                return availableModels.includes(name) ? name : rawValue;
+            };
             if (modelPath.startsWith("/content/models/")) {
                 modelPath = modelName;
             }
@@ -71,6 +76,12 @@ export function migrateNodes(nodes: StackNode[]): StackNode[] {
                     model: modelPath,
                     is_own_model: isOwn,
                     dtype: dtypeValue,
+                    auto_detect_color: options.auto_detect_color ?? false,
+                    color_model: normalizeModelName(options.color_model),
+                    gray_model: normalizeModelName(options.gray_model),
+                    color_detect_mode: Object.values(ColorDetectMode).includes(options.color_detect_mode)
+                        ? options.color_detect_mode
+                        : ColorDetectMode.AUTO,
                 },
             };
 
