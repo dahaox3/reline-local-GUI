@@ -6,6 +6,7 @@ export interface PureHalftoneNodeOptions {
   angle: number | number[]
   dot_type: DotType | DotType[]
   halftone_mode: HalftoneMode
+  skip_on_color?: boolean
 }
 
 export const screentoneOptionsSchema = z.object({
@@ -15,6 +16,7 @@ export const screentoneOptionsSchema = z.object({
   dot_type: z.union([z.nativeEnum(DotType), z.array(z.nativeEnum(DotType))]),
   ssaa_scale: z.number().optional(),
   ssaa_filter: z.nativeEnum(ResizeFilterType).optional(),
+  skip_on_color: z.boolean().optional(),
 })
 
 export type ScreentoneNodeOptions = z.infer<typeof screentoneOptionsSchema>

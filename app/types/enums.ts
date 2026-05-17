@@ -102,6 +102,11 @@ export enum ColorDetectMode {
   FORCE_GRAY = "force_gray",
 }
 
+export enum ModelCacheMode {
+  LOW_MEMORY = "low_memory",
+  HIGH_MEMORY = "high_memory",
+}
+
 export enum HalftoneMode {
   GRAY = "gray",
   RGB = "rgb",

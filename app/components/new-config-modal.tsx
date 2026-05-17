@@ -50,7 +50,8 @@ export function NewConfigModal({ open, onClose, folderPath, setCurrentFilePath }
                     "auto_detect_color": false,
                     "color_model": "",
                     "gray_model": "",
-                    "color_detect_mode": "auto"
+                    "color_detect_mode": "auto",
+                    "model_cache_mode": "low_memory"
                 }
             },
             {
@@ -73,7 +74,8 @@ export function NewConfigModal({ open, onClose, folderPath, setCurrentFilePath }
                     "dot_type": "circle",
                     "halftone_mode": "gray",
                     "ssaa_filter": "shamming4",
-                    "ssaa_scale": 4
+                    "ssaa_scale": 4,
+                    "skip_on_color": true
                 }
             },
             {

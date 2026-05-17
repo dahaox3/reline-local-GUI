@@ -1,6 +1,6 @@
 import type { ConvertToPureFunction, ConvertToStackFunction } from "~/lib/convert/index.ts"
 import type { PureUpscaleNodeOptions, UpscaleNodeOptions } from "~/types/options"
-import { ColorDetectMode, NodeType, PureNodeType } from "~/types/enums"
+import { ColorDetectMode, ModelCacheMode, NodeType, PureNodeType } from "~/types/enums"
 import { DEFAULT_COLLAPSED, DEFAULT_MODEL } from "~/constants"
 
 const getModelFolderPath = () => {
@@ -66,6 +66,7 @@ export const convertUpscaleToStack: ConvertToStackFunction = (nodes, index) => {
           color_model: options.color_model ?? "",
           gray_model: options.gray_model ?? "",
           color_detect_mode: options.color_detect_mode ?? ColorDetectMode.AUTO,
+          model_cache_mode: options.model_cache_mode ?? ModelCacheMode.LOW_MEMORY,
           is_own_model: true,
         },
         collapsed: DEFAULT_COLLAPSED,

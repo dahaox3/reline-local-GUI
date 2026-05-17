@@ -27,4 +27,6 @@ dist-ssr
 *.sln
 *.sw?
 /reline/.venv/
+/reline/data.json
+/reline/uv/
 /release/

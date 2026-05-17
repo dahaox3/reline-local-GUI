@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { ColorDetectMode, DType, TilerType } from "~/types/enums"
+import { ColorDetectMode, DType, ModelCacheMode, TilerType } from "~/types/enums"
 
 export const UpscaleOptionsSchema = z.object({
   is_own_model: z.boolean(),
@@ -12,6 +12,7 @@ export const UpscaleOptionsSchema = z.object({
   color_model: z.string(),
   gray_model: z.string(),
   color_detect_mode: z.nativeEnum(ColorDetectMode),
+  model_cache_mode: z.nativeEnum(ModelCacheMode),
 })
 
 export type UpscaleNodeOptions = z.infer<typeof UpscaleOptionsSchema>

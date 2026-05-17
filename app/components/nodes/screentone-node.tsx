@@ -2,6 +2,7 @@ import {useContext, useEffect} from "react"
 import {NodesContext, NodesDispatchContext} from "~/context/contexts.ts"
 import {Label} from "../ui/label"
 import {Input} from "../ui/input"
+import {Checkbox} from "../ui/checkbox"
 import type {ScreentoneNodeOptions} from "~/types/options"
 import {NodesActionType} from "~/types/actions.ts"
 import {Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue} from "~/components/ui/select.tsx"
@@ -110,6 +111,16 @@ export function ScreentoneNodeBody({id}: { id: number }) {
 
     return (
         <div className="flex flex-col gap-5">
+            <div className="flex items-center space-x-2">
+                <Checkbox
+                    checked={!!options.skip_on_color}
+                    onCheckedChange={(value) => {
+                        changeValue({skip_on_color: !!value})
+                    }}
+                />
+                <Label>skip on color</Label>
+            </div>
+
             <div className="flex flex-col gap-2">
                 <Label>Halftone mode</Label>
                 <Select

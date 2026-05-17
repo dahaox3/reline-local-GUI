@@ -3,6 +3,8 @@ import {NodesContext, NodesDispatchContext} from "~/context/contexts.ts"
 import {NumberInput} from "~/components/ui"
 import type {LevelNodeOptions} from "~/types/options"
 import {NodesActionType} from "~/types/actions.ts"
+import {Checkbox} from "~/components/ui/checkbox.tsx"
+import {Label} from "~/components/ui/label.tsx"
 
 export function LevelNodeBody({id}: { id: number }) {
     const nodes = useContext(NodesContext)
@@ -25,7 +27,16 @@ export function LevelNodeBody({id}: { id: number }) {
         })
     }
     return (
-        <div>
+        <div className="flex flex-col gap-5">
+            <div className="flex items-center space-x-2">
+                <Checkbox
+                    checked={!!options.skip_on_color}
+                    onCheckedChange={(value) => {
+                        changeValue({skip_on_color: !!value})
+                    }}
+                />
+                <Label>skip on color</Label>
+            </div>
             <NumberInput
                 min={0}
                 max={255}

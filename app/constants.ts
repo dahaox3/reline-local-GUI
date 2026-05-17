@@ -4,6 +4,7 @@ import {
   CvtType,
   DotType,
   DType, HalftoneMode,
+  ModelCacheMode,
   NodeType,
   ReaderNodeMode,
   ResizeFilterType,
@@ -42,6 +43,7 @@ export const DEFAULT_NODE_OPTIONS: {
     low_output: 0,
     high_output: 255,
     gamma: 1,
+    skip_on_color: false,
   },
   folder_reader: {
     path: "C:\\raws",
@@ -75,6 +77,7 @@ export const DEFAULT_NODE_OPTIONS: {
     color_model: "",
     gray_model: "",
     color_detect_mode: ColorDetectMode.AUTO,
+    model_cache_mode: ModelCacheMode.LOW_MEMORY,
   },
   resize: {
     resize_type: ResizeType.BY_WIDTH,
@@ -90,6 +93,7 @@ export const DEFAULT_NODE_OPTIONS: {
     angle: DEFAULT_HALFTONE_ANGLE,
     dot_type: DEFAULT_HALFTONE_DOT_TYPE,
     ssaa_filter: DEFAULT_HALFTONE_SSAA_FILTER,
+    skip_on_color: true,
   },
 }
 

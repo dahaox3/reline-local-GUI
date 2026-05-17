@@ -1,6 +1,6 @@
-import {ColorDetectMode, DType, NodeType, ReaderNodeMode, ResizeFilterType} from "~/types/enums";
+import {ColorDetectMode, DType, ModelCacheMode, NodeType, ReaderNodeMode, ResizeFilterType} from "~/types/enums";
 import type {StackNode} from "~/types/node";
-import {FolderReaderNodeOptions, ResizeNodeOptions, UpscaleNodeOptions} from "~/types/options";
+import {FolderReaderNodeOptions, LevelNodeOptions, ResizeNodeOptions, ScreentoneNodeOptions, UpscaleNodeOptions} from "~/types/options";
 
 export function migrateNodes(nodes: StackNode[]): StackNode[] {
     let availableModels: string[] = [];
@@ -44,6 +44,26 @@ export function migrateNodes(nodes: StackNode[]): StackNode[] {
                 };
             }
         }
+        if (node.type === NodeType.LEVEL) {
+            const options = node.options as LevelNodeOptions;
+            return {
+                ...node,
+                options: {
+                    ...options,
+                    skip_on_color: options.skip_on_color ?? false,
+                },
+            };
+        }
+        if (node.type === NodeType.SCREENTONE) {
+            const options = node.options as ScreentoneNodeOptions;
+            return {
+                ...node,
+                options: {
+                    ...options,
+                    skip_on_color: options.skip_on_color ?? true,
+                },
+            };
+        }
         if (node.type === NodeType.UPSCALE) {
             const options = node.options as UpscaleNodeOptions;
             let dtypeValue = options.dtype;
@@ -82,6 +102,9 @@ export function migrateNodes(nodes: StackNode[]): StackNode[] {
                     color_detect_mode: Object.values(ColorDetectMode).includes(options.color_detect_mode)
                         ? options.color_detect_mode
                         : ColorDetectMode.AUTO,
+                    model_cache_mode: Object.values(ModelCacheMode).includes(options.model_cache_mode)
+                        ? options.model_cache_mode
+                        : ModelCacheMode.LOW_MEMORY,
                 },
             };
 

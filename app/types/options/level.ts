@@ -6,6 +6,7 @@ export interface PureLevelNodeOptions {
   low_output: number
   high_output: number
   gamma: number
+  skip_on_color?: boolean
 }
 
 export const levelNodeOptionsSchema = z.object({
@@ -14,6 +15,7 @@ export const levelNodeOptionsSchema = z.object({
   low_output: z.number(z.number().min(0).max(255)),
   high_output: z.number(z.number().min(0).max(255)),
   gamma: z.number(z.number().min(0).max(10)),
+  skip_on_color: z.boolean().optional(),
 })
 
 export type LevelNodeOptions = z.infer<typeof levelNodeOptionsSchema>

@@ -1,7 +1,7 @@
 import {useContext, useEffect, useState} from "react"
 import {NodesContext, NodesDispatchContext} from "~/context/contexts"
 import {ModelsContext, useSetModels, useModels} from "~/context/model-provider"
-import {ColorDetectMode, DType, TilerType} from "~/types/enums"
+import {ColorDetectMode, DType, ModelCacheMode, TilerType} from "~/types/enums"
 import {Label} from "../ui/label"
 import {DEFAULT_MODEL, DEFAULT_TILE_SIZE} from "~/constants"
 import {Popover, PopoverContent, PopoverTrigger} from "../ui/popover"
@@ -139,6 +139,7 @@ export function UpscaleNodeBody({id}: { id: number }) {
                             gray_model: enabled ? grayModel : options.gray_model,
                             color_model: options.color_model || "",
                             color_detect_mode: options.color_detect_mode || ColorDetectMode.AUTO,
+                            model_cache_mode: options.model_cache_mode || ModelCacheMode.LOW_MEMORY,
                         })
                     }}
                 />
@@ -160,6 +161,29 @@ export function UpscaleNodeBody({id}: { id: number }) {
                                 <SelectContent>
                                     <SelectGroup>
                                         {Object.values(ColorDetectMode).map((mode) => {
+                                            return (
+                                                <SelectItem key={mode} value={mode}>
+                                                    {mode}
+                                                </SelectItem>
+                                            )
+                                        })}
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Label>Model cache</Label>
+                            <Select
+                                onValueChange={(value: ModelCacheMode) => changeValue({model_cache_mode: value})}
+                                value={options.model_cache_mode || ModelCacheMode.LOW_MEMORY}
+                            >
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {Object.values(ModelCacheMode).map((mode) => {
                                             return (
                                                 <SelectItem key={mode} value={mode}>
                                                     {mode}

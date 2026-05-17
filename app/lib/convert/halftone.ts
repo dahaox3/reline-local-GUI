@@ -33,7 +33,10 @@ export const convertHalftoneToStack: ConvertToStackFunction = (nodes, index) => 
       {
         id: index,
         type: NodeType.SCREENTONE,
-        options: options as ScreentoneNodeOptions,
+        options: {
+          ...options,
+          skip_on_color: options.skip_on_color ?? true,
+        } as ScreentoneNodeOptions,
         collapsed: DEFAULT_COLLAPSED,
       },
     ],
