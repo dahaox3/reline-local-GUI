@@ -28,5 +28,7 @@ dist-ssr
 *.sw?
 /reline/.venv/
 /reline/data.json
+/reline/server_config.json
+/reline/tmp/
 /reline/uv/
 /release/

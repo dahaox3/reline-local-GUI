@@ -15,6 +15,8 @@ const relineForkPackage = "git+https://github.com/dahaox3/reline.git";
 
 let currentChild = null;
 let manuallyStopped = false;
+let serverChild = null;
+let serverPort = 5678;
 
 // ==== Helpers ====
 function runCommand(command, args = [], options = {}, onData = () => {}) {
@@ -385,6 +387,12 @@ ipcMain.handle("install-dependency", async (event, id) => {
             return;
         }
 
+        if (id === "server") {
+            log("📦 Installing server dependencies...");
+            await runCommand(uvBinaryPath, [...pipArgs, "fastapi", "uvicorn", "python-multipart"], { cwd: relineDir }, log);
+            return;
+        }
+
         throw new Error(`Unknown dependency ID: ${id}`);
     } catch (err) {
         event.sender.send("pipeline-output", `❌ ${err.message}`);
@@ -624,6 +632,51 @@ ipcMain.handle("stop-python-pipeline", () => {
         currentChild.kill("SIGTERM");
     }
 });
+
+ipcMain.handle("start-reline-server", async (event, { jsonData, port = 5678 }) => {
+    if (serverChild) {
+        return { started: true, port: serverPort, alreadyRunning: true };
+    }
+
+    const configPath = path.join(relineDir, "server_config.json");
+    fs.writeFileSync(configPath, JSON.stringify(jsonData, null, 2));
+
+    const venvPath = path.join(relineDir, ".venv");
+    const pythonPath = os.platform() === "win32"
+        ? path.join(venvPath, "Scripts", "python.exe")
+        : path.join(venvPath, "bin", "python");
+    const scriptPath = path.join(relineDir, "server.py");
+    serverPort = Number(port) || 5678;
+
+    serverChild = spawn(pythonPath, [scriptPath, "--host", "127.0.0.1", "--port", String(serverPort)], {
+        cwd: relineDir,
+        windowsHide: true,
+        shell: false,
+    });
+
+    serverChild.stdout.on("data", (d) => event.sender.send("pipeline-output", d.toString()));
+    serverChild.stderr.on("data", (d) => event.sender.send("pipeline-output", d.toString()));
+    serverChild.on("close", (code) => {
+        console.log("Reline server closed, code:", code);
+        event.sender.send("reline-server-end", { code });
+        serverChild = null;
+    });
+
+    return { started: true, port: serverPort };
+});
+
+ipcMain.handle("stop-reline-server", () => {
+    if (serverChild) {
+        serverChild.kill("SIGTERM");
+        serverChild = null;
+    }
+    return { stopped: true };
+});
+
+ipcMain.handle("get-reline-server-state", () => ({
+    running: !!serverChild,
+    port: serverPort,
+}));
 
 // Audio
 ipcMain.handle("select-audio-file", async () => {

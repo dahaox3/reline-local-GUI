@@ -7,7 +7,7 @@ import { DEFAULT_NODES, STORAGE_KEY } from "~/constants"
 import { CodeSection } from "~/components/code-section"
 import { NodesSection } from "~/components/nodes-section"
 import { Button } from "~/components/ui/button"
-import {Play, Square, LoaderCircle, Download, Github, Package, Folder} from "lucide-react"
+import {Play, Square, LoaderCircle, Download, Github, Package, Folder, Radio} from "lucide-react"
 import { nodesToString, cn } from "~/lib/utils"
 import { Progress } from "~/components/ui/progress"
 import { DependencyManagerModal } from "~/components/dependency-manager-modal"
@@ -20,6 +20,7 @@ import {DiscordLogoIcon} from "@radix-ui/react-icons";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, } from "@/components/ui/tooltip"
 import {NodeType} from "~/types/enums.ts";
 import {FolderWriterNodeOptions, ResizeNodeOptions} from "~/types/options";
+import {Input} from "~/components/ui/input.tsx";
 
 export default function HomePage() {
     const setModels = useSetModels()
@@ -36,6 +37,11 @@ export default function HomePage() {
     const [currentFilePath, setCurrentFilePath] = useState(() => {
         if (typeof window === "undefined") return ""
         return localStorage.getItem("reline_current_config") || ""
+    })
+    const [serverRunning, setServerRunning] = useState(false)
+    const [serverPort, setServerPort] = useState(() => {
+        if (typeof window === "undefined") return 5678
+        return Number(localStorage.getItem("reline_server_port") || "5678")
     })
 
     const checkDependencies = async () => {
@@ -59,6 +65,10 @@ export default function HomePage() {
 
     useEffect(() => {
         checkDependencies()
+        window.electronAPI.getRelineServerState?.().then((state) => {
+            setServerRunning(state.running)
+            setServerPort(state.port || 5678)
+        }).catch(() => {})
     }, [])
 
     useEffect(() => {
@@ -225,6 +235,30 @@ export default function HomePage() {
             audioRef.current.currentTime = 0;
             audioRef.current = null;
             isPlayingRef.current = false;
+        }
+    }
+
+    const handleToggleServer = async () => {
+        if (!dependenciesInstalled) {
+            setShowInstallModal(true)
+            return
+        }
+        try {
+            if (serverRunning) {
+                await window.electronAPI.stopRelineServer()
+                setServerRunning(false)
+                toast.success("Reline service stopped")
+                return
+            }
+            const json = JSON.parse(nodesToString(nodes))
+            const result = await window.electronAPI.startRelineServer({jsonData: json, port: serverPort})
+            localStorage.setItem("reline_server_port", String(result.port))
+            setServerPort(result.port)
+            setServerRunning(true)
+            toast.success(`Reline service running on 127.0.0.1:${result.port}`)
+        } catch (err) {
+            console.error(err)
+            toast.error("Failed to toggle Reline service")
         }
     }
 
@@ -398,6 +432,38 @@ export default function HomePage() {
                             </div>
 
                             <div className="flex items-center gap-2">
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    max={65535}
+                                    className="w-24 h-9"
+                                    value={serverPort}
+                                    onChange={(event) => {
+                                        const port = Number(event.target.value)
+                                        setServerPort(port)
+                                        localStorage.setItem("reline_server_port", String(port))
+                                    }}
+                                    disabled={serverRunning}
+                                />
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            title={serverRunning ? "Stop service mode" : "Start service mode"}
+                                            className={cn(
+                                                serverRunning &&
+                                                "border-green-500 text-green-600 bg-green-500/10 hover:bg-green-500/20",
+                                            )}
+                                            onClick={handleToggleServer}
+                                        >
+                                            <Radio/>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>{serverRunning ? "Stop service mode" : "Start service mode"}</p>
+                                    </TooltipContent>
+                                </Tooltip>
                                 <div className="text-muted-foreground text-sm">v1.1.0</div>
                                 <Tooltip>
                                     <TooltipTrigger asChild>

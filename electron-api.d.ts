@@ -60,6 +60,12 @@ declare global {
                 jsonData: any
             ) => Promise<{ started: boolean }>;
             stopPythonPipeline: () => Promise<void>;
+            startRelineServer: (args: {
+                jsonData: any;
+                port?: number;
+            }) => Promise<{ started: boolean; port: number; alreadyRunning?: boolean }>;
+            stopRelineServer: () => Promise<{ stopped: boolean }>;
+            getRelineServerState: () => Promise<{ running: boolean; port: number }>;
 
             // === Audio ===
             selectAudioFile: () => Promise<string | null>;
