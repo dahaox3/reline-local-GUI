@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { spawn, execSync } = require("child_process");
+const http = require("http");
 const https = require("https");
 
 const isDev = !app.isPackaged;
@@ -30,18 +31,79 @@ function sanitizeRelineConfig(jsonData) {
     });
 }
 
+function defaultServerReaderNode() {
+    return {
+        type: "folder_reader",
+        options: {
+            path: path.join(os.tmpdir(), "reline-server-input"),
+            recursive: false,
+            mode: "dynamic",
+        },
+    };
+}
+
+function normalizeRelineServerConfig(jsonData) {
+    if (!Array.isArray(jsonData)) {
+        throw new Error("Reline server config must be a JSON array");
+    }
+
+    const config = jsonData.map((node) => ({
+        ...node,
+        options: { ...(node?.options || {}) },
+    }));
+
+    if (!config.some((node) => node?.type === "folder_reader")) {
+        config.unshift(defaultServerReaderNode());
+    }
+
+    return config;
+}
+
+function getRelineServerConfigPath() {
+    return path.join(relineDir, "server_config.json");
+}
+
 function writeRelineServerConfig(jsonData) {
-    const configPath = path.join(relineDir, "server_config.json");
-    fs.writeFileSync(configPath, JSON.stringify(jsonData, null, 2));
+    fs.writeFileSync(getRelineServerConfigPath(), JSON.stringify(normalizeRelineServerConfig(jsonData), null, 2));
+}
+
+function restoreRelineServerConfig(previousContent) {
+    const configPath = getRelineServerConfigPath();
+    if (previousContent === null) {
+        if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
+        return;
+    }
+    fs.writeFileSync(configPath, previousContent);
 }
 
 async function postRelineServerReload() {
-    const url = `http://${serverHost}:${serverPort}/reload`;
-    const response = await fetch(url, { method: "POST" });
-    const body = await response.text();
-    if (!response.ok) {
-        throw new Error(body || `Reline API reload failed with ${response.status}`);
-    }
+    const body = await new Promise((resolve, reject) => {
+        const request = http.request({
+            host: serverHost,
+            port: serverPort,
+            path: "/reload",
+            method: "POST",
+            timeout: 10000,
+        }, (response) => {
+            let data = "";
+            response.setEncoding("utf8");
+            response.on("data", (chunk) => {
+                data += chunk;
+            });
+            response.on("end", () => {
+                if (response.statusCode < 200 || response.statusCode >= 300) {
+                    reject(new Error(data || `Reline API reload failed with ${response.statusCode}`));
+                    return;
+                }
+                resolve(data);
+            });
+        });
+        request.on("timeout", () => {
+            request.destroy(new Error("Reline API reload timed out"));
+        });
+        request.on("error", reject);
+        request.end();
+    });
     return body ? JSON.parse(body) : { reloaded: true };
 }
 
@@ -696,9 +758,16 @@ ipcMain.handle("reload-reline-server", async (_event, { jsonData }) => {
     if (!serverChild) {
         return { reloaded: false, running: false };
     }
+    const configPath = getRelineServerConfigPath();
+    const previousContent = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : null;
     writeRelineServerConfig(jsonData);
-    const result = await postRelineServerReload();
-    return { reloaded: true, running: true, ...result };
+    try {
+        const result = await postRelineServerReload();
+        return { reloaded: true, running: true, ...result };
+    } catch (error) {
+        restoreRelineServerConfig(previousContent);
+        throw error;
+    }
 });
 
 ipcMain.handle("stop-reline-server", () => {

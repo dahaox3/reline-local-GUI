@@ -16,6 +16,7 @@ import orjson
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from reline.nodes import INTERNAL_REGISTRY
 from reline.nodes.file_reader import FileReaderNode
@@ -85,6 +86,17 @@ TMP_ROOT = BASE_DIR / 'tmp' / 'server'
 logger = logging.getLogger('reline.server')
 
 app = FastAPI(title='Reline Local API')
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_methods=['*'],
+    allow_headers=['*'],
+    expose_headers=[
+        'X-Reline-Detected-Color',
+        'X-Reline-Model-Used',
+        'X-Reline-Skipped-Nodes',
+    ],
+)
 queue_lock = asyncio.Lock()
 node_lock = asyncio.Lock()
 status = {
@@ -160,6 +172,23 @@ def validate_server_config(config: list[dict[str, Any]]) -> int:
     if writer_index is not None and writer_index < len(config) - 1:
         logger.warning('folder_writer is before later nodes; server mode will run those nodes before writing output')
     return upscale_index
+
+
+def default_server_reader_node() -> dict[str, Any]:
+    return {
+        'type': 'folder_reader',
+        'options': {
+            'path': str(TMP_ROOT / 'input-placeholder'),
+            'recursive': False,
+            'mode': 'dynamic',
+        },
+    }
+
+
+def normalize_server_config(config: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if find_node_index(config, 'folder_reader') is not None:
+        return config
+    return [default_server_reader_node(), *config]
 
 
 def folder_writer_api_output_path(config: list[dict[str, Any]]) -> Path | None:
@@ -254,9 +283,9 @@ def dispose_upscale_node() -> None:
 
 def reload_config_state() -> dict[str, Any]:
     global cached_config, cached_upscale_index
-    dispose_upscale_node()
-    config = load_config()
+    config = normalize_server_config(load_config())
     upscale_index = validate_server_config(config)
+    dispose_upscale_node()
     cached_config = config
     cached_upscale_index = upscale_index
     return {'reloaded': True, 'models': model_names_from_config(config)}
@@ -265,7 +294,7 @@ def reload_config_state() -> dict[str, Any]:
 def ensure_config_state() -> tuple[list[dict[str, Any]], int]:
     global cached_config, cached_upscale_index
     if cached_config is None or cached_upscale_index is None:
-        config = load_config()
+        config = normalize_server_config(load_config())
         cached_upscale_index = validate_server_config(config)
         cached_config = config
     return cached_config, cached_upscale_index
