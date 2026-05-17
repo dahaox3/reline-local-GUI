@@ -332,6 +332,7 @@ ipcMain.handle("install-updates", async (event) => {
         console.log("Installing:", ["pip", "install", "--upgrade", relineForkPackage, "resselt[cu126]"]);
         await runCommand(uvBinaryPath, [
             "pip", "install", "--upgrade", "--force-reinstall",
+            "--index-strategy", "unsafe-best-match",
             "--index-url", "https://pypi.org/simple",
             "--extra-index-url", "https://download.pytorch.org/whl/cu126",
             relineForkPackage, "resselt[cu126]"
