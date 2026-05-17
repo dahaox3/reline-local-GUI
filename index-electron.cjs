@@ -20,6 +20,15 @@ let serverPort = 5678;
 let serverHost = "127.0.0.1";
 
 // ==== Helpers ====
+function sanitizeRelineConfig(jsonData) {
+    return jsonData.map((node) => {
+        if (node?.type !== "folder_writer") return node;
+        const options = { ...(node.options || {}) };
+        delete options.api_output_path;
+        return { ...node, options };
+    });
+}
+
 function writeRelineServerConfig(jsonData) {
     const configPath = path.join(relineDir, "server_config.json");
     fs.writeFileSync(configPath, JSON.stringify(jsonData, null, 2));
@@ -616,7 +625,7 @@ ipcMain.handle("select-save-json-file", async () => {
 // Pipeline
 ipcMain.handle("run-python-pipeline", async (event, jsonData) => {
     const tempPath = path.join(relineDir, "data.json");
-    fs.writeFileSync(tempPath, JSON.stringify(jsonData, null, 2));
+    fs.writeFileSync(tempPath, JSON.stringify(sanitizeRelineConfig(jsonData), null, 2));
 
     const venvPath = path.join(relineDir, ".venv");
     const pythonPath = os.platform() === "win32"

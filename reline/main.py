@@ -31,6 +31,9 @@ def normalize_paths(obj):
     return obj
 
 data = normalize_paths(data)
+for node in data:
+    if isinstance(node, dict) and node.get('type') == 'folder_writer':
+        node.get('options', {}).pop('api_output_path', None)
 
 try:
     Pipeline.from_json(data).process_linear()

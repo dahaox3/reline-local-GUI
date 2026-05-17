@@ -8,10 +8,14 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import {restrictToFirstScrollableAncestor, restrictToVerticalAxis} from "@dnd-kit/modifiers"
 import { NodesActionType } from "~/types/actions"
+import { NodeType } from "~/types/enums"
+import { AlertTriangle } from "lucide-react"
 
 export function NodesSection() {
     const nodes = useContext(NodesContext)
     const dispatch = useContext(NodesDispatchContext)
+    const writerIndex = nodes.findIndex((node) => node.type === NodeType.FOLDER_WRITER)
+    const writerHasLaterNodes = writerIndex !== -1 && writerIndex < nodes.length - 1
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -63,6 +67,12 @@ export function NodesSection() {
                 <AddNodeButton />
             </CardHeader>
             <CardContent className="flex flex-col gap-3 flex-1 overflow-hidden">
+                {writerHasLaterNodes && (
+                    <div className="flex gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>Folder writer is before another node. Server mode delays writing until later nodes finish; normal pipeline mode may skip those later nodes.</span>
+                    </div>
+                )}
                 <ScrollArea className="rounded-md m-0 border h-full overflow-x-hidden">
                     <DndContext
                         sensors={sensors}

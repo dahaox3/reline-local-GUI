@@ -140,9 +140,19 @@ def validate_server_config(config: list[dict[str, Any]]) -> int:
     upscale_index = upscale_indexes[0]
     if not reader_index < upscale_index < writer_index:
         raise ConfigError('Server config requires folder_reader -> upscale -> folder_writer order')
-    if writer_index != len(config) - 1:
-        logger.warning('folder_writer is not the last node; server mode will run later nodes before writing output')
+    if writer_index < len(config) - 1:
+        logger.warning('folder_writer is before later nodes; server mode will run those nodes before writing output')
     return upscale_index
+
+
+def folder_writer_api_output_path(config: list[dict[str, Any]]) -> Path | None:
+    for node in config:
+        if node.get('type') != 'folder_writer':
+            continue
+        api_output_path = (node.get('options') or {}).get('api_output_path')
+        if api_output_path:
+            return Path(api_output_path)
+    return None
 
 
 def patch_request_config(
@@ -172,7 +182,10 @@ def patch_request_config(
 def create_node(node_data: dict[str, Any]) -> Node:
     node_type = node_data['type']
     node_pair = INTERNAL_REGISTRY.get(node_type)
-    options = node_pair.options(**node_data['options'])
+    options_data = dict(node_data['options'])
+    if node_type == 'folder_writer':
+        options_data.pop('api_output_path', None)
+    options = node_pair.options(**options_data)
     return node_pair.node(options)
 
 
@@ -246,6 +259,14 @@ def find_output_file(output_dir: Path) -> Path:
     if not files:
         raise FileNotFoundError('Pipeline did not produce an output image')
     return max(files, key=lambda path: path.stat().st_mtime)
+
+
+def copy_api_output_file(source_path: Path, config: list[dict[str, Any]]) -> None:
+    api_output_path = folder_writer_api_output_path(config)
+    if api_output_path is None:
+        return
+    api_output_path.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_path, api_output_path / source_path.name)
 
 
 def media_type_for(path: Path) -> str:
@@ -383,6 +404,7 @@ async def upscale(file: UploadFile = File(...), color_detect_mode: str | None = 
             output_path = find_output_file(output_dir)
             response_path = request_dir / output_path.name
             shutil.copy2(output_path, response_path)
+            copy_api_output_file(output_path, config)
             return FileResponse(
                 response_path,
                 media_type=media_type_for(response_path),

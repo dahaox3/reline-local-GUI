@@ -53,6 +53,7 @@ export const DEFAULT_NODE_OPTIONS: {
   folder_writer: {
     path: "C:\\raws\\output",
     format: WriterNodeFormat.PNG,
+    api_output_path: "",
   },
   cvt_color: {
     cvt_type: CvtType.RGB2Gray2020,
