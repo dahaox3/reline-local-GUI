@@ -21,7 +21,8 @@ let serverHost = "127.0.0.1";
 
 // ==== Helpers ====
 function sanitizeRelineConfig(jsonData) {
-    return jsonData.map((node) => {
+    return jsonData.flatMap((node) => {
+        if (node?.type === "snapshot_writer" || node?.type === "api_output") return [];
         if (node?.type !== "folder_writer") return node;
         const options = { ...(node.options || {}) };
         delete options.api_output_path;

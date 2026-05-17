@@ -1,9 +1,9 @@
 import {ArrowUp, ArrowDown, X, ChevronDown, ChevronRight, ChevronsUpDown, Check, GripVertical} from "lucide-react"
 import {type FC, useContext, useState} from "react"
 import {NodesContext, NodesDispatchContext} from "~/context/contexts"
-import {NodeType} from "~/types/enums"
+import {NODE_TYPE_LABELS, NodeType} from "~/types/enums"
 import {DEFAULT_NODE_OPTIONS} from "~/constants"
-import {CvtColorNodeBody, FolderReaderNodeBody, FolderWriterNodeBody, LevelNodeBody, SharpNodeBody} from "./nodes"
+import {ApiOutputNodeBody, ApiSnapshotNodeBody, CvtColorNodeBody, FolderReaderNodeBody, FolderWriterNodeBody, LevelNodeBody, SharpNodeBody} from "./nodes"
 import {
     Collapsible,
     CollapsibleContent,
@@ -30,6 +30,8 @@ const nodeBodyComponents: { [key in NodeType]: FC<{ id: number }> } = {
     upscale: UpscaleNodeBody as FC<{ id: number }>,
     resize: ResizeNodeBody as FC<{ id: number }>,
     screentone: ScreentoneNodeBody as FC<{ id: number }>,
+    snapshot_writer: ApiSnapshotNodeBody as FC<{ id: number }>,
+    api_output: ApiOutputNodeBody as FC<{ id: number }>,
 }
 
 function Combobox({allValues, initialValue, onChange}: {
@@ -45,7 +47,7 @@ function Combobox({allValues, initialValue, onChange}: {
             <PopoverTrigger asChild>
                 <Button variant="outline" aria-role="combobox" aria-expanded={open}
                         className="w-[200px] justify-between">
-                    {value}
+                    {NODE_TYPE_LABELS[value as NodeType] ?? value}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50"/>
                 </Button>
             </PopoverTrigger>
@@ -67,7 +69,7 @@ function Combobox({allValues, initialValue, onChange}: {
                                 >
                                     <Check
                                         className={cn("mr-2 h-4 w-4", value === _value ? "opacity-100" : "opacity-0")}/>
-                                    {_value}
+                                    {NODE_TYPE_LABELS[_value as NodeType] ?? _value}
                                 </CommandItem>
                             ))}
                         </CommandGroup>

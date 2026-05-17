@@ -4,6 +4,8 @@ import type {
   PureCvtColorNodeOptions,
   PureFolderReaderNodeOptions,
   PureFolderWriterNodeOptions,
+  PureApiSnapshotNodeOptions,
+  PureApiOutputNodeOptions,
   PureHalftoneNodeOptions,
   PureLevelNodeOptions,
   PureResizeOptions,
@@ -15,6 +17,8 @@ import type {
   CvtColorNodeOptions,
   FolderReaderNodeOptions,
   FolderWriterNodeOptions,
+  ApiSnapshotNodeOptions,
+  ApiOutputNodeOptions,
   ScreentoneNodeOptions,
   LevelNodeOptions,
   ResizeNodeOptions,
@@ -26,6 +30,8 @@ export type NodeOptions =
   | CvtColorNodeOptions
   | FolderReaderNodeOptions
   | FolderWriterNodeOptions
+  | ApiSnapshotNodeOptions
+  | ApiOutputNodeOptions
   | ScreentoneNodeOptions
   | LevelNodeOptions
   | ResizeNodeOptions
@@ -36,6 +42,8 @@ export type PureNodeOptions =
   | PureCvtColorNodeOptions
   | PureFolderReaderNodeOptions
   | PureFolderWriterNodeOptions
+  | PureApiSnapshotNodeOptions
+  | PureApiOutputNodeOptions
   | PureHalftoneNodeOptions
   | PureLevelNodeOptions
   | PureResizeOptions

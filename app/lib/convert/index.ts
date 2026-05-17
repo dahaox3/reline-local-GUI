@@ -44,6 +44,8 @@ const convertToPureMapper: ToPureConvertMapper = {
   [NodeType.CVT_COLOR]: convertEqualsToPure,
   [NodeType.FOLDER_READER]: convertFolderReaderToPure,
   [NodeType.FOLDER_WRITER]: convertEqualsToPure,
+  [NodeType.API_SNAPSHOT]: convertEqualsToPure,
+  [NodeType.API_OUTPUT]: convertEqualsToPure,
   [NodeType.LEVEL]: convertEqualsToPure,
   [NodeType.SHARP]: convertEqualsToPure,
 }
@@ -54,6 +56,8 @@ const convertToStackMapper: ToStackConvertMapper = {
   [PureNodeType.CVT_COLOR]: convertEqualsToStack,
   [PureNodeType.FOLDER_READER]: convertFolderReaderToStack,
   [PureNodeType.FOLDER_WRITER]: convertEqualsToStack,
+  [PureNodeType.API_SNAPSHOT]: convertEqualsToStack,
+  [PureNodeType.API_OUTPUT]: convertEqualsToStack,
   [PureNodeType.LEVEL]: convertEqualsToStack,
   [PureNodeType.SHARP]: convertEqualsToStack,
 }
@@ -72,7 +76,30 @@ export const convertToStack = (nodes: PureNode[]) => {
   const result = []
   for (let i = 0; i < nodes.length; ) {
     const [converted, nextIndex] = convertToStackMapper[nodes[i].type](nodes, i)
-    result.push(...converted)
+    for (const node of converted) {
+      const rawOptions = node.options as Record<string, unknown>
+      if (
+        node.type === NodeType.FOLDER_WRITER &&
+        typeof rawOptions.api_output_path === 'string' &&
+        rawOptions.api_output_path
+      ) {
+        result.push({
+          id: result.length,
+          type: NodeType.API_SNAPSHOT,
+          options: {
+            path: rawOptions.api_output_path,
+            format: rawOptions.format,
+          },
+          collapsed: DEFAULT_COLLAPSED,
+        })
+      }
+      if (node.type === NodeType.FOLDER_WRITER && 'api_output_path' in rawOptions) {
+        const { api_output_path, ...options } = rawOptions
+        result.push({ ...node, options: options as NodeOptions })
+      } else {
+        result.push(node)
+      }
+    }
     i = nextIndex
   }
   return result.map((node, index) => {

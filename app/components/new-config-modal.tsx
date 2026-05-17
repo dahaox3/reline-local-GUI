@@ -92,8 +92,7 @@ export function NewConfigModal({ open, onClose, folderPath, setCurrentFilePath }
                 "type": "folder_writer",
                 "options": {
                     "path": "C:\\raws\\output",
-                    "format": "png",
-                    "api_output_path": ""
+                    "format": "png"
                 }
             }
         ], null, 2);

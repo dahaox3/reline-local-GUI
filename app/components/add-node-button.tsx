@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "~/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover"
-import { NodeType } from "~/types/enums"
+import { NODE_TYPE_LABELS, NodeType } from "~/types/enums"
 import { useContext, useState } from "react"
 import { NodesContext, NodesDispatchContext } from "~/context/contexts"
 import { DEFAULT_NODE_OPTIONS } from "~/constants"
@@ -42,7 +42,7 @@ export function AddNodeButton() {
                     setOpen(false)
                   }}
                 >
-                  {value}
+                  {NODE_TYPE_LABELS[value]}
                 </CommandItem>
               ))}
             </CommandGroup>

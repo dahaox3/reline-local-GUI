@@ -22,6 +22,12 @@ from reline.nodes.file_reader import FileReaderNode
 from reline.nodes.file_writer import FileWriterNode
 from reline.nodes.folder_reader import FolderReaderNode
 from reline.nodes.folder_writer import FolderWriterNode
+try:
+    from reline.nodes.api_output import ApiOutputNode
+    from reline.nodes.snapshot_writer import SnapshotWriterNode
+except ImportError:
+    ApiOutputNode = None
+    SnapshotWriterNode = None
 from reline.nodes.upscale import UpscaleNode
 from reline.nodes.upscale.node import empty_cuda_cache
 from reline.static import ImageFile, Node
@@ -129,18 +135,29 @@ def validate_server_config(config: list[dict[str, Any]]) -> int:
     reader_index = find_node_index(config, 'folder_reader')
     writer_index = find_node_index(config, 'folder_writer')
     upscale_indexes = [i for i, node in enumerate(config) if node.get('type') == 'upscale']
+    api_output_indexes = [i for i, node in enumerate(config) if node.get('type') == 'api_output']
     if reader_index is None:
         raise ConfigError('Server config requires a folder_reader node')
-    if writer_index is None:
-        raise ConfigError('Server config requires a folder_writer node')
+    if writer_index is None and not api_output_indexes:
+        raise ConfigError('Server config requires a folder_writer node or an api_output node')
     if not upscale_indexes:
         raise ConfigError('Server config requires an upscale node')
     if len(upscale_indexes) > 1:
         raise ConfigError('Server mode does not support multiple upscale nodes')
+    if len(api_output_indexes) > 1:
+        raise ConfigError('Server mode does not support multiple api_output nodes')
     upscale_index = upscale_indexes[0]
-    if not reader_index < upscale_index < writer_index:
+    if not reader_index < upscale_index:
+        raise ConfigError('Server config requires folder_reader before upscale')
+    if writer_index is not None and not reader_index < upscale_index < writer_index:
         raise ConfigError('Server config requires folder_reader -> upscale -> folder_writer order')
-    if writer_index < len(config) - 1:
+    for index in api_output_indexes:
+        if index <= reader_index:
+            raise ConfigError('api_output must be after folder_reader')
+    for index, node in enumerate(config):
+        if node.get('type') == 'snapshot_writer' and index <= reader_index:
+            raise ConfigError('snapshot_writer must be after folder_reader')
+    if writer_index is not None and writer_index < len(config) - 1:
         logger.warning('folder_writer is before later nodes; server mode will run those nodes before writing output')
     return upscale_index
 
@@ -181,12 +198,32 @@ def patch_request_config(
 
 def create_node(node_data: dict[str, Any]) -> Node:
     node_type = node_data['type']
+    if node_type in {'snapshot_writer', 'api_output'} and node_type not in INTERNAL_REGISTRY:
+        raise ConfigError(f'{node_type} requires updating the reline package')
     node_pair = INTERNAL_REGISTRY.get(node_type)
     options_data = dict(node_data['options'])
     if node_type == 'folder_writer':
         options_data.pop('api_output_path', None)
     options = node_pair.options(**options_data)
     return node_pair.node(options)
+
+
+def clone_image_file(file: ImageFile) -> ImageFile:
+    return ImageFile(
+        file.data.copy(),
+        file.basename,
+        file.dir,
+        file.is_color,
+        file.skipped_nodes.copy(),
+    )
+
+
+def save_snapshot_file(file: ImageFile, node_data: dict[str, Any]) -> None:
+    if SnapshotWriterNode is not None and 'snapshot_writer' in INTERNAL_REGISTRY:
+        node = create_node(node_data)
+        node.api_process(file)
+        return
+    raise ConfigError('snapshot_writer requires updating the reline package')
 
 
 def create_upscale_node(config: list[dict[str, Any]], upscale_index: int) -> UpscaleNode:
@@ -266,7 +303,15 @@ def copy_api_output_file(source_path: Path, config: list[dict[str, Any]]) -> Non
     if api_output_path is None:
         return
     api_output_path.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source_path, api_output_path / source_path.name)
+    target = api_output_path / source_path.name
+    if target.exists():
+        stem = source_path.stem
+        suffix = source_path.suffix
+        counter = 1
+        while target.exists():
+            target = api_output_path / f'{stem}_{counter}{suffix}'
+            counter += 1
+    shutil.copy2(source_path, target)
 
 
 def media_type_for(path: Path) -> str:
@@ -290,6 +335,27 @@ def collect_result(img: ImageFile | None, node: UpscaleNode) -> dict[str, Any]:
     return result
 
 
+def write_output_image(
+    img: ImageFile,
+    writer_node: FolderWriterNode | FileWriterNode | None,
+    output_dir: Path,
+) -> Path:
+    if writer_node is None:
+        writer_node = create_node({
+            'type': 'folder_writer',
+            'options': {
+                'path': str(output_dir),
+                'format': 'png',
+            },
+        })
+    before = set(output_dir.rglob('*'))
+    writer_node.single_process(img)
+    files = [path for path in output_dir.rglob('*') if path.is_file() and path not in before]
+    if files:
+        return max(files, key=lambda path: path.stat().st_mtime)
+    return find_output_file(output_dir)
+
+
 def run_single_image(
     config: list[dict[str, Any]],
     upscale_index: int,
@@ -303,6 +369,7 @@ def run_single_image(
     if color_detect_mode:
         node.update_options(replace(node.options, color_detect_mode=color_detect_mode))
     img: ImageFile | None = None
+    api_output_img: ImageFile | None = None
     writer_node: FolderWriterNode | FileWriterNode | None = None
 
     try:
@@ -314,6 +381,18 @@ def run_single_image(
                 img = node.single_process(img)
                 if img is None:
                     raise RuntimeError('Upscale node skipped the image')
+                continue
+
+            if node_type == 'api_output':
+                if img is None:
+                    raise ConfigError('api_output node did not receive an image')
+                api_output_img = clone_image_file(img)
+                continue
+
+            if node_type == 'snapshot_writer':
+                if img is None:
+                    raise ConfigError('snapshot_writer node did not receive an image')
+                save_snapshot_file(img, node_data)
                 continue
 
             runtime_node = create_node(node_data)
@@ -333,12 +412,13 @@ def run_single_image(
                 if img is None:
                     raise RuntimeError(f'{node_type} node skipped the image')
 
-        if writer_node is None:
-            raise ConfigError('Server config did not write an output image')
-        if img is None:
+        output_img = api_output_img if api_output_img is not None else img
+        if output_img is None:
             raise ConfigError('Writer node did not receive an image')
-        writer_node.single_process(img)
-        return collect_result(img, node)
+        output_path = write_output_image(output_img, writer_node, output_dir)
+        result = collect_result(img, node)
+        result['output_path'] = str(output_path)
+        return result
     finally:
         if node.options is not old_upscale_options:
             node.update_options(old_upscale_options)
@@ -401,7 +481,7 @@ async def upscale(file: UploadFile = File(...), color_detect_mode: str | None = 
             status['current_detected_color'] = result.get('detected_color')
             status['last_model_used'] = result.get('model_used')
             status['last_skipped_nodes'] = result.get('skipped_nodes') or []
-            output_path = find_output_file(output_dir)
+            output_path = Path(result['output_path'])
             response_path = request_dir / output_path.name
             shutil.copy2(output_path, response_path)
             copy_api_output_file(output_path, config)

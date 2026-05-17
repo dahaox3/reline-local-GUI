@@ -18,6 +18,8 @@ export enum NodeType {
   UPSCALE = "upscale",
   RESIZE = "resize",
   SCREENTONE = "screentone",
+  API_SNAPSHOT = "snapshot_writer",
+  API_OUTPUT = "api_output",
 }
 
 export enum PureNodeType {
@@ -29,6 +31,21 @@ export enum PureNodeType {
   UPSCALE = "upscale",
   RESIZE = "resize",
   HALFTONE = "halftone",
+  API_SNAPSHOT = "snapshot_writer",
+  API_OUTPUT = "api_output",
+}
+
+export const NODE_TYPE_LABELS: Record<NodeType, string> = {
+  [NodeType.LEVEL]: "level",
+  [NodeType.FOLDER_READER]: "folder_reader",
+  [NodeType.FOLDER_WRITER]: "folder_writer",
+  [NodeType.SHARP]: "sharp",
+  [NodeType.CVT_COLOR]: "cvt_color",
+  [NodeType.UPSCALE]: "upscale",
+  [NodeType.RESIZE]: "resize",
+  [NodeType.SCREENTONE]: "screentone",
+  [NodeType.API_SNAPSHOT]: "API Snapshot",
+  [NodeType.API_OUTPUT]: "API Output",
 }
 
 export enum CvtType {
