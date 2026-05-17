@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     runPythonPipeline: (jsonData) => ipcRenderer.invoke("run-python-pipeline", jsonData),
     stopPythonPipeline: () => ipcRenderer.invoke("stop-python-pipeline"),
     startRelineServer: (args) => ipcRenderer.invoke("start-reline-server", args),
+    reloadRelineServer: (args) => ipcRenderer.invoke("reload-reline-server", args),
     stopRelineServer: () => ipcRenderer.invoke("stop-reline-server"),
     getRelineServerState: () => ipcRenderer.invoke("get-reline-server-state"),
     onPipelineOutput: (callback) => ipcRenderer.on("pipeline-output", (_event, data) => callback(data)),

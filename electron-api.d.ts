@@ -65,6 +65,9 @@ declare global {
                 host?: string;
                 port?: number;
             }) => Promise<{ started: boolean; host: string; port: number; alreadyRunning?: boolean }>;
+            reloadRelineServer: (args: {
+                jsonData: any;
+            }) => Promise<{ reloaded: boolean; running: boolean }>;
             stopRelineServer: () => Promise<{ stopped: boolean }>;
             getRelineServerState: () => Promise<{ running: boolean; host: string; port: number }>;
 

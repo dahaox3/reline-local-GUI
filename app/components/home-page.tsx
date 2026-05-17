@@ -7,7 +7,7 @@ import { DEFAULT_NODES, STORAGE_KEY } from "~/constants"
 import { CodeSection } from "~/components/code-section"
 import { NodesSection } from "~/components/nodes-section"
 import { Button } from "~/components/ui/button"
-import {Play, Square, LoaderCircle, Download, Github, Package, Folder, Radio} from "lucide-react"
+import {Play, Square, LoaderCircle, Download, Github, Package, Folder, Radio, RefreshCw} from "lucide-react"
 import { nodesToString, cn } from "~/lib/utils"
 import { Progress } from "~/components/ui/progress"
 import { DependencyManagerModal } from "~/components/dependency-manager-modal"
@@ -269,6 +269,18 @@ export default function HomePage() {
         }
     }
 
+    const handleReloadServer = async () => {
+        if (!serverRunning) return
+        try {
+            const json = JSON.parse(nodesToString(nodes))
+            await window.electronAPI.reloadRelineServer({jsonData: json})
+            toast.success("Reline API config applied")
+        } catch (err) {
+            console.error(err)
+            toast.error("Failed to apply Reline API config")
+        }
+    }
+
     const handleSave = () => {
         if (currentFilePath) {
             window.electronAPI.saveJsonFile(currentFilePath, nodesToString(nodes))
@@ -481,6 +493,22 @@ export default function HomePage() {
                                     </TooltipTrigger>
                                     <TooltipContent>
                                         <p>{serverRunning ? `Stop API at ${serverHost}:${serverPort}` : "Start API service"}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            title="Apply current config to API"
+                                            disabled={!serverRunning}
+                                            onClick={handleReloadServer}
+                                        >
+                                            <RefreshCw/>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Apply current config to running API</p>
                                     </TooltipContent>
                                 </Tooltip>
                                 <div className="text-muted-foreground text-sm">v1.1.0</div>

@@ -3,16 +3,25 @@ from __future__ import annotations
 import argparse
 import asyncio
 import copy
+import gc
 import os
 import shutil
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import orjson
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
-from reline import Pipeline
+from reline.nodes import INTERNAL_REGISTRY
+from reline.nodes.file_reader import FileReaderNode
+from reline.nodes.file_writer import FileWriterNode
+from reline.nodes.folder_reader import FolderReaderNode
+from reline.nodes.folder_writer import FolderWriterNode
+from reline.nodes.upscale import UpscaleNode
+from reline.nodes.upscale.node import empty_cuda_cache
+from reline.static import ImageFile, Node
 from starlette.background import BackgroundTask
 
 BASE_DIR = Path(__file__).parent.resolve()
@@ -21,6 +30,7 @@ TMP_ROOT = BASE_DIR / 'tmp' / 'server'
 
 app = FastAPI(title='Reline Local API')
 queue_lock = asyncio.Lock()
+node_lock = asyncio.Lock()
 status = {
     'state': 'idle',
     'queue_length': 0,
@@ -29,6 +39,14 @@ status = {
     'last_model_used': None,
     'last_skipped_nodes': [],
 }
+
+cached_config: list[dict[str, Any]] | None = None
+cached_upscale_index: int | None = None
+upscale_node: UpscaleNode | None = None
+
+
+class ConfigError(ValueError):
+    pass
 
 
 def normalize_paths(obj: Any) -> Any:
@@ -50,7 +68,37 @@ def load_config() -> list[dict[str, Any]]:
         return normalize_paths(orjson.loads(file.read()))
 
 
-def patch_single_image_config(config: list[dict[str, Any]], input_dir: Path, output_dir: Path, color_detect_mode: str | None) -> list[dict[str, Any]]:
+def find_node_index(config: list[dict[str, Any]], node_type: str) -> int | None:
+    for i, node in enumerate(config):
+        if node.get('type') == node_type:
+            return i
+    return None
+
+
+def validate_server_config(config: list[dict[str, Any]]) -> int:
+    reader_index = find_node_index(config, 'folder_reader')
+    writer_index = find_node_index(config, 'folder_writer')
+    upscale_indexes = [i for i, node in enumerate(config) if node.get('type') == 'upscale']
+    if reader_index is None:
+        raise ConfigError('Server config requires a folder_reader node')
+    if writer_index is None:
+        raise ConfigError('Server config requires a folder_writer node')
+    if not upscale_indexes:
+        raise ConfigError('Server config requires an upscale node')
+    if len(upscale_indexes) > 1:
+        raise ConfigError('Server mode does not support multiple upscale nodes')
+    upscale_index = upscale_indexes[0]
+    if not reader_index < upscale_index < writer_index:
+        raise ConfigError('Server config requires folder_reader -> upscale -> folder_writer order')
+    return upscale_index
+
+
+def patch_request_config(
+    config: list[dict[str, Any]],
+    input_dir: Path,
+    output_dir: Path,
+    color_detect_mode: str | None,
+) -> list[dict[str, Any]]:
     patched = copy.deepcopy(config)
     for node in patched:
         node_type = node.get('type')
@@ -62,9 +110,70 @@ def patch_single_image_config(config: list[dict[str, Any]], input_dir: Path, out
                 options['mode'] = 'dynamic'
         elif node_type == 'folder_writer':
             options['path'] = str(output_dir)
-        elif node_type == 'upscale' and color_detect_mode:
-            options['color_detect_mode'] = color_detect_mode
+        elif node_type == 'upscale':
+            options['model_cache_mode'] = 'high_memory'
+            if color_detect_mode:
+                options['color_detect_mode'] = color_detect_mode
     return patched
+
+
+def create_node(node_data: dict[str, Any]) -> Node:
+    node_type = node_data['type']
+    node_pair = INTERNAL_REGISTRY.get(node_type)
+    options = node_pair.options(**node_data['options'])
+    return node_pair.node(options)
+
+
+def create_upscale_node(config: list[dict[str, Any]], upscale_index: int) -> UpscaleNode:
+    node_data = copy.deepcopy(config[upscale_index])
+    node_data['options']['model_cache_mode'] = 'high_memory'
+    node = create_node(node_data)
+    if not isinstance(node, UpscaleNode):
+        raise ConfigError('Configured upscale node did not create an UpscaleNode')
+    return node
+
+
+def dispose_upscale_node() -> None:
+    global upscale_node
+    node = upscale_node
+    upscale_node = None
+    if node is None:
+        return
+    try:
+        if getattr(node, 'model', None) is not None:
+            del node.model
+            node.model = None
+        if getattr(node, 'model_cache', None) is not None:
+            node.model_cache.clear()
+    finally:
+        gc.collect()
+        empty_cuda_cache()
+
+
+def reload_config_state() -> dict[str, Any]:
+    global cached_config, cached_upscale_index
+    dispose_upscale_node()
+    config = load_config()
+    upscale_index = validate_server_config(config)
+    cached_config = config
+    cached_upscale_index = upscale_index
+    return {'reloaded': True, 'models': model_names_from_config(config)}
+
+
+def ensure_config_state() -> tuple[list[dict[str, Any]], int]:
+    global cached_config, cached_upscale_index
+    if cached_config is None or cached_upscale_index is None:
+        config = load_config()
+        cached_upscale_index = validate_server_config(config)
+        cached_config = config
+    return cached_config, cached_upscale_index
+
+
+def ensure_upscale_node(config: list[dict[str, Any]], upscale_index: int) -> UpscaleNode:
+    global upscale_node
+    if upscale_node is None:
+        upscale_node = create_upscale_node(config, upscale_index)
+    return upscale_node
 
 
 def model_names_from_config(config: list[dict[str, Any]]) -> list[str]:
@@ -96,6 +205,74 @@ def media_type_for(path: Path) -> str:
     return 'image/png'
 
 
+def collect_result(img: ImageFile | None, node: UpscaleNode) -> dict[str, Any]:
+    result = {
+        'detected_color': None,
+        'model_used': getattr(node, 'last_model_path', None),
+        'skipped_nodes': [],
+    }
+    if img is not None:
+        result['detected_color'] = 'color' if img.is_color else 'gray' if img.is_color is not None else None
+        result['skipped_nodes'] = img.skipped_nodes
+    detection = getattr(node, 'last_detection', None)
+    if detection is not None:
+        result['detected_color'] = 'color' if detection.is_color else 'gray'
+    return result
+
+
+def run_single_image(
+    config: list[dict[str, Any]],
+    upscale_index: int,
+    input_dir: Path,
+    output_dir: Path,
+    color_detect_mode: str | None,
+) -> dict[str, Any]:
+    request_config = patch_request_config(config, input_dir, output_dir, color_detect_mode)
+    node = ensure_upscale_node(config, upscale_index)
+    old_upscale_options = node.options
+    if color_detect_mode:
+        node.update_options(replace(node.options, color_detect_mode=color_detect_mode))
+    img: ImageFile | None = None
+    writer_seen = False
+
+    try:
+        for i, node_data in enumerate(request_config):
+            node_type = node_data.get('type')
+            if i == upscale_index:
+                if img is None:
+                    raise ConfigError('Upscale node did not receive an image')
+                img = node.single_process(img)
+                if img is None:
+                    raise RuntimeError('Upscale node skipped the image')
+                continue
+
+            runtime_node = create_node(node_data)
+            if isinstance(runtime_node, FolderReaderNode | FileReaderNode):
+                data = runtime_node.single_process([])
+                img = next(iter(data), None) if not isinstance(data, ImageFile) else data
+                if img is None:
+                    raise FileNotFoundError('Reader did not produce an input image')
+            elif isinstance(runtime_node, FolderWriterNode | FileWriterNode):
+                if img is None:
+                    raise ConfigError('Writer node did not receive an image')
+                runtime_node.single_process(img)
+                writer_seen = True
+                break
+            else:
+                if img is None:
+                    raise ConfigError(f'{node_type} node did not receive an image')
+                img = runtime_node.single_process(img)
+                if img is None:
+                    raise RuntimeError(f'{node_type} node skipped the image')
+
+        if not writer_seen:
+            raise ConfigError('Server config did not write an output image')
+        return collect_result(img, node)
+    finally:
+        if node.options is not old_upscale_options:
+            node.update_options(old_upscale_options)
+
+
 @app.get('/status')
 async def get_status():
     return JSONResponse(status)
@@ -108,6 +285,15 @@ async def get_models():
     except Exception as e:
         return JSONResponse({'models': [], 'error': str(e)}, status_code=500)
     return {'models': model_names_from_config(config)}
+
+
+@app.post('/reload')
+async def reload_server_config():
+    async with node_lock:
+        try:
+            return reload_config_state()
+        except Exception as e:
+            return JSONResponse({'reloaded': False, 'error': str(e)}, status_code=500)
 
 
 @app.post('/upscale')
@@ -131,10 +317,16 @@ async def upscale(file: UploadFile = File(...), color_detect_mode: str | None = 
             with input_path.open('wb') as out:
                 shutil.copyfileobj(file.file, out)
 
-            config = patch_single_image_config(load_config(), input_dir, output_dir, color_detect_mode)
-            pipeline = Pipeline.from_json(config)
-            await asyncio.to_thread(lambda: pipeline.process_linear(with_tqdm=False))
-            result = pipeline.last_result
+            async with node_lock:
+                config, upscale_index = ensure_config_state()
+                result = await asyncio.to_thread(
+                    run_single_image,
+                    config,
+                    upscale_index,
+                    input_dir,
+                    output_dir,
+                    color_detect_mode,
+                )
             status['current_detected_color'] = result.get('detected_color')
             status['last_model_used'] = result.get('model_used')
             status['last_skipped_nodes'] = result.get('skipped_nodes') or []
@@ -165,6 +357,11 @@ async def upscale(file: UploadFile = File(...), color_detect_mode: str | None = 
                     shutil.rmtree(request_dir, ignore_errors=True)
             except Exception:
                 pass
+
+
+@app.on_event('shutdown')
+def on_shutdown():
+    dispose_upscale_node()
 
 
 def main():

@@ -20,6 +20,21 @@ let serverPort = 5678;
 let serverHost = "127.0.0.1";
 
 // ==== Helpers ====
+function writeRelineServerConfig(jsonData) {
+    const configPath = path.join(relineDir, "server_config.json");
+    fs.writeFileSync(configPath, JSON.stringify(jsonData, null, 2));
+}
+
+async function postRelineServerReload() {
+    const url = `http://${serverHost}:${serverPort}/reload`;
+    const response = await fetch(url, { method: "POST" });
+    const body = await response.text();
+    if (!response.ok) {
+        throw new Error(body || `Reline API reload failed with ${response.status}`);
+    }
+    return body ? JSON.parse(body) : { reloaded: true };
+}
+
 function runCommand(command, args = [], options = {}, onData = () => {}) {
     return new Promise((resolve, reject) => {
         const child = spawn(command, args, { shell: false, ...options });
@@ -640,8 +655,7 @@ ipcMain.handle("start-reline-server", async (event, { jsonData, host = "127.0.0.
         return { started: true, host: serverHost, port: serverPort, alreadyRunning: true };
     }
 
-    const configPath = path.join(relineDir, "server_config.json");
-    fs.writeFileSync(configPath, JSON.stringify(jsonData, null, 2));
+    writeRelineServerConfig(jsonData);
 
     const venvPath = path.join(relineDir, ".venv");
     const pythonPath = os.platform() === "win32"
@@ -666,6 +680,15 @@ ipcMain.handle("start-reline-server", async (event, { jsonData, host = "127.0.0.
     });
 
     return { started: true, host: serverHost, port: serverPort };
+});
+
+ipcMain.handle("reload-reline-server", async (_event, { jsonData }) => {
+    if (!serverChild) {
+        return { reloaded: false, running: false };
+    }
+    writeRelineServerConfig(jsonData);
+    const result = await postRelineServerReload();
+    return { reloaded: true, running: true, ...result };
 });
 
 ipcMain.handle("stop-reline-server", () => {
