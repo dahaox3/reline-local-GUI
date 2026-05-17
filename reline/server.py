@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 import orjson
+import cv2
+import numpy as np
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from reline.nodes import INTERNAL_REGISTRY
@@ -23,6 +25,52 @@ from reline.nodes.upscale import UpscaleNode
 from reline.nodes.upscale.node import empty_cuda_cache
 from reline.static import ImageFile, Node
 from starlette.background import BackgroundTask
+
+try:
+    from reline.utils import detect_image_color
+except ImportError:
+    def _to_uint8_rgb(img):
+        if img.dtype == np.uint8:
+            result = img.copy()
+        else:
+            result = np.asarray(img)
+            if result.size and float(np.nanmax(result)) <= 1.0:
+                result = result * 255.0
+            result = np.clip(result, 0, 255).astype(np.uint8)
+
+        if result.ndim == 2:
+            return np.stack([result, result, result], axis=-1)
+        if result.ndim == 3 and result.shape[2] >= 3:
+            return result[:, :, :3]
+        return np.squeeze(result)
+
+    def detect_image_color(img):
+        squeezed = np.squeeze(img)
+        if squeezed.ndim == 2:
+            return type('ColorDetectionResult', (), {'is_color': False})()
+        if squeezed.ndim != 3 or squeezed.shape[2] == 1:
+            return type('ColorDetectionResult', (), {'is_color': False})()
+
+        rgb = _to_uint8_rgb(squeezed)
+        if rgb.ndim != 3 or rgb.shape[2] < 3:
+            return type('ColorDetectionResult', (), {'is_color': False})()
+
+        height, width = rgb.shape[:2]
+        scale = 256 / max(height, width)
+        if scale < 1:
+            rgb = cv2.resize(rgb, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA)
+
+        value = rgb.max(axis=2)
+        mask = (value >= 10) & (value <= 245)
+        if not np.any(mask):
+            return type('ColorDetectionResult', (), {'is_color': False})()
+
+        hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
+        saturation = hsv[:, :, 1]
+        rgb_diff = rgb.max(axis=2).astype(np.int16) - rgb.min(axis=2).astype(np.int16)
+        saturated_ratio = float(np.mean(saturation[mask] > 30))
+        rgb_diff_mean = float(np.mean(rgb_diff[mask]))
+        return type('ColorDetectionResult', (), {'is_color': saturated_ratio > 0.05 and rgb_diff_mean > 10})()
 
 BASE_DIR = Path(__file__).parent.resolve()
 CONFIG_PATH = BASE_DIR / 'server_config.json'
@@ -214,9 +262,6 @@ def collect_result(img: ImageFile | None, node: UpscaleNode) -> dict[str, Any]:
     if img is not None:
         result['detected_color'] = 'color' if img.is_color else 'gray' if img.is_color is not None else None
         result['skipped_nodes'] = img.skipped_nodes
-    detection = getattr(node, 'last_detection', None)
-    if detection is not None:
-        result['detected_color'] = 'color' if detection.is_color else 'gray'
     return result
 
 
@@ -252,6 +297,8 @@ def run_single_image(
                 img = next(iter(data), None) if not isinstance(data, ImageFile) else data
                 if img is None:
                     raise FileNotFoundError('Reader did not produce an input image')
+                if img.is_color is None:
+                    img.is_color = detect_image_color(img.data).is_color
             elif isinstance(runtime_node, FolderWriterNode | FileWriterNode):
                 if img is None:
                     raise ConfigError('Writer node did not receive an image')
