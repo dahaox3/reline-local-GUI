@@ -18,6 +18,7 @@ import numpy as np
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from pepeline import save
 from reline.nodes import INTERNAL_REGISTRY
 from reline.nodes.file_reader import FileReaderNode
 from reline.nodes.file_writer import FileWriterNode
@@ -252,7 +253,27 @@ def save_snapshot_file(file: ImageFile, node_data: dict[str, Any]) -> None:
         node = create_node(node_data)
         node.api_process(file)
         return
-    raise ConfigError('snapshot_writer requires updating the reline package')
+
+    options = node_data.get('options') or {}
+    snapshot_dir = options.get('path')
+    if not snapshot_dir:
+        raise ConfigError('snapshot_writer requires a path')
+    file_format = options.get('format') or 'png'
+    relative_dir = Path(file.dir or '')
+    target = Path(snapshot_dir).resolve() / relative_dir / f'{file.basename}.{file_format}'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    save(file.data, str(unique_path(target)))
+
+
+def unique_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    counter = 1
+    while True:
+        target = path.parent / f'{path.stem}_{counter}{path.suffix}'
+        if not target.exists():
+            return target
+        counter += 1
 
 
 def create_upscale_node(config: list[dict[str, Any]], upscale_index: int) -> UpscaleNode:
