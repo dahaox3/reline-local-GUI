@@ -172,7 +172,31 @@ def validate_server_config(config: list[dict[str, Any]]) -> int:
             raise ConfigError('snapshot_writer must be after folder_reader')
     if writer_index is not None and writer_index < len(config) - 1:
         logger.warning('folder_writer is before later nodes; server mode will run those nodes before writing output')
+    validate_upscale_models(config[upscale_index])
     return upscale_index
+
+
+def validate_upscale_models(upscale_node_data: dict[str, Any]) -> None:
+    options = upscale_node_data.get('options') or {}
+    auto_detect_color = bool(options.get('auto_detect_color'))
+    model_fields = ('model', 'gray_model', 'color_model') if auto_detect_color else ('model',)
+    configured_models = {
+        key: options.get(key)
+        for key in model_fields
+        if options.get(key)
+    }
+    if auto_detect_color and not configured_models:
+        raise ConfigError('Upscale node requires at least one model, gray_model, or color_model')
+    if not auto_detect_color and not configured_models.get('model'):
+        raise ConfigError('Upscale node requires a model')
+
+    missing = []
+    for key, model in configured_models.items():
+        model_path = Path(model)
+        if not model_path.exists():
+            missing.append(f'{key}: {model}')
+    if missing:
+        raise ConfigError('Configured upscale model file not found: ' + '; '.join(missing))
 
 
 def default_server_reader_node() -> dict[str, Any]:

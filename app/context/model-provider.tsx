@@ -36,6 +36,27 @@ export function ModelsProvider({ children }: { children: React.ReactNode }) {
     _setModelsData(data);
   };
 
+  useEffect(() => {
+    if (!modelsData.folderPath) return;
+    window.electronAPI.loadModelsFromFolder(modelsData.folderPath)
+      .then((data) => {
+        if (!data) {
+          setModelsData({ folderPath: "", models: [] });
+          return;
+        }
+        if (
+          data.folderPath !== modelsData.folderPath ||
+          data.models.join("\0") !== modelsData.models.join("\0")
+        ) {
+          setModelsData(data);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to refresh model folder:", err);
+        setModelsData({ folderPath: "", models: [] });
+      });
+  }, [modelsData.folderPath]);
+
   return (
       <ModelsContext.Provider value={modelsData}>
         <SetModelsContext.Provider value={setModelsData}>{children}</SetModelsContext.Provider>
