@@ -12,7 +12,9 @@ const isDev = !app.isPackaged;
 const relineDir = path.join(__dirname, "reline");
 const uvBinDir = path.join(relineDir, "uv");
 const uvBinaryPath = path.join(uvBinDir, os.platform() === "win32" ? "uv.exe" : "uv");
-const relineForkPackage = "git+https://github.com/dahaox3/reline.git";
+const relineForkRepo = "https://github.com/dahaox3/reline.git";
+const relineForkBranch = "main";
+const relineForkPackage = `git+${relineForkRepo}`;
 
 let currentChild = null;
 let manuallyStopped = false;
@@ -124,6 +126,52 @@ function runCommand(command, args = [], options = {}, onData = () => {}) {
             else reject(new Error(`${command} exited with code ${code}`));
         });
     });
+}
+
+function requestText(url) {
+    return new Promise((resolve, reject) => {
+        const request = https.get(url, {
+            headers: {
+                "User-Agent": "reline-local-gui",
+            },
+        }, (response) => {
+            let body = "";
+            response.setEncoding("utf8");
+            response.on("data", (chunk) => {
+                body += chunk;
+            });
+            response.on("end", () => {
+                if (response.statusCode < 200 || response.statusCode >= 300) {
+                    reject(new Error(body || `Request failed with ${response.statusCode}`));
+                    return;
+                }
+                resolve(body);
+            });
+        });
+        request.on("error", reject);
+        request.end();
+    });
+}
+
+function parseRelineGitCommit(freezeOutput) {
+    const line = freezeOutput
+        .split(/\r?\n/)
+        .find((item) => item.startsWith("reline @ git+"));
+    return line?.match(/@([0-9a-f]{40})(?:\s|$)/i)?.[1]?.toLowerCase() || null;
+}
+
+async function checkRelineGitUpdate() {
+    const freezeOutput = await runCommand(uvBinaryPath, ["pip", "freeze"], { cwd: relineDir });
+    const installedCommit = parseRelineGitCommit(freezeOutput);
+    if (!installedCommit) return false;
+
+    const refs = await requestText(`${relineForkRepo}/info/refs?service=git-upload-pack`);
+    const latestCommit = refs
+        .match(new RegExp(`([0-9a-f]{40})\\s+refs/heads/${relineForkBranch}`, "i"))?.[1]
+        ?.toLowerCase();
+    if (!latestCommit) return false;
+
+    return installedCommit !== latestCommit;
 }
 
 function getPlatformName() {
@@ -404,7 +452,7 @@ ipcMain.handle("check-for-updates", async (event) => {
             .split("\n")
             .slice(2)
             .some(line => line.includes("reline") || line.includes("resselt"));
-        return { updatesAvailable };
+        return { updatesAvailable: updatesAvailable || await checkRelineGitUpdate() };
     } catch (err) {
         if (err.message.includes("ENOTFOUND") || err.message.includes("ETIMEDOUT") || err.message.includes("network")) {
             throw new Error("No internet connection");
