@@ -6,9 +6,10 @@ import {Checkbox} from "../ui/checkbox"
 import {Label} from "../ui/label"
 import {Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue} from "../ui/select"
 import {NodesActionType} from "~/types/actions.ts"
-import type {FolderReaderNodeOptions} from "~/types/options"
+import type {FolderReaderNodeOptions, FolderWriterNodeOptions} from "~/types/options"
 import {Button, buttonVariants} from "../ui/button"
 import {FolderOpen} from "lucide-react"
+import {NodeType} from "~/types/enums.ts"
 
 export function FolderReaderNodeBody({id}: { id: number }) {
     const nodes = useContext(NodesContext)
@@ -97,6 +98,52 @@ export function FolderReaderNodeBody({id}: { id: number }) {
                     }}
                 />
                 <Label>recursive</Label>
+            </div>
+            <div>
+                <Label>Skip existing in</Label>
+                <div className="flex items-center gap-2">
+                    <Input
+                        placeholder="Output folder to compare"
+                        value={options.skip_existing_in}
+                        onChange={(e) => {
+                            changeValue({skip_existing_in: e.target.value})
+                        }}
+                    />
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        type="button"
+                        title="Select folder"
+                        onClick={async () => {
+                            try {
+                                const folderPath = await window.electronAPI.selectFolderPath()
+                                if (folderPath) {
+                                    changeValue({skip_existing_in: folderPath})
+                                }
+                            } catch (err) {
+                                console.error("Folder selection cancelled or failed:", err)
+                            }
+                        }}
+                    >
+                        <FolderOpen/>
+                    </Button>
+                    <Button
+                        variant="outline"
+                        type="button"
+                        title="Use folder_writer path"
+                        onClick={() => {
+                            const writer = nodes.find((n) => n.type === NodeType.FOLDER_WRITER)
+                            const writerOptions = writer?.options as FolderWriterNodeOptions | undefined
+                            const path = typeof writerOptions?.path === "string" ? writerOptions.path : ""
+                            if (path) changeValue({skip_existing_in: path})
+                        }}
+                    >
+                        Use writer
+                    </Button>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    Skip input files whose basename already exists in this folder.
+                </p>
             </div>
         </div>
     )

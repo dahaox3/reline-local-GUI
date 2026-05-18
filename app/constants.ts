@@ -49,6 +49,7 @@ export const DEFAULT_NODE_OPTIONS: {
     path: "C:\\raws",
     recursive: true,
     mode: ReaderNodeMode.DYNAMIC,
+    skip_existing_in: "",
   },
   folder_writer: {
     path: "C:\\raws\\output",
@@ -59,6 +60,7 @@ export const DEFAULT_NODE_OPTIONS: {
     format: WriterNodeFormat.PNG,
   },
   api_output: {
+    format: WriterNodeFormat.JPEG,
   },
   cvt_color: {
     cvt_type: CvtType.RGB2Gray2020,

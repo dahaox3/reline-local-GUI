@@ -36,6 +36,12 @@ from reline.static import ImageFile, Node
 from starlette.background import BackgroundTask
 
 try:
+    from reline.utils import atomic_save
+except ImportError:
+    def atomic_save(data, target_path: str) -> None:
+        save(data, target_path)
+
+try:
     from reline.utils import detect_image_color
 except ImportError:
     def _to_uint8_rgb(img):
@@ -286,7 +292,7 @@ def save_snapshot_file(file: ImageFile, node_data: dict[str, Any]) -> None:
     relative_dir = Path(file.dir or '')
     target = Path(snapshot_dir).resolve() / relative_dir / f'{file.basename}.{file_format}'
     target.parent.mkdir(parents=True, exist_ok=True)
-    save(file.data, str(unique_path(target)))
+    atomic_save(file.data, str(unique_path(target)))
 
 
 def unique_path(path: Path) -> Path:
@@ -413,13 +419,14 @@ def write_output_image(
     img: ImageFile,
     writer_node: FolderWriterNode | FileWriterNode | None,
     output_dir: Path,
+    api_output_format: str | None = None,
 ) -> Path:
     if writer_node is None:
         writer_node = create_node({
             'type': 'folder_writer',
             'options': {
                 'path': str(output_dir),
-                'format': 'png',
+                'format': api_output_format or 'png',
             },
         })
     before = set(output_dir.rglob('*'))
@@ -444,6 +451,7 @@ def run_single_image(
         node.update_options(replace(node.options, color_detect_mode=color_detect_mode))
     img: ImageFile | None = None
     api_output_img: ImageFile | None = None
+    api_output_format: str | None = None
     writer_node: FolderWriterNode | FileWriterNode | None = None
 
     try:
@@ -461,6 +469,7 @@ def run_single_image(
                 if img is None:
                     raise ConfigError('api_output node did not receive an image')
                 api_output_img = clone_image_file(img)
+                api_output_format = (node_data.get('options') or {}).get('format') or 'jpeg'
                 continue
 
             if node_type == 'snapshot_writer':
@@ -489,7 +498,7 @@ def run_single_image(
         output_img = api_output_img if api_output_img is not None else img
         if output_img is None:
             raise ConfigError('Writer node did not receive an image')
-        output_path = write_output_image(output_img, writer_node, output_dir)
+        output_path = write_output_image(output_img, writer_node, output_dir, api_output_format if api_output_img is not None else None)
         result = collect_result(img, node)
         result['output_path'] = str(output_path)
         return result

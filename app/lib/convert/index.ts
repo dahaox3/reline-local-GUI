@@ -1,4 +1,4 @@
-import { NodeType, PureNodeType } from "~/types/enums.ts"
+import { NodeType, PureNodeType, WriterNodeFormat } from "~/types/enums.ts"
 import type { NodeOptions, PureNode, PureNodeOptions, StackNode } from "~/types/node.ts"
 import { convertHalftoneToStack, convertScreentoneToPure } from "~/lib/convert/halftone.ts"
 import { convertResizeToPure, convertResizeToStack } from "~/lib/convert/resize.ts"
@@ -88,7 +88,9 @@ export const convertToStack = (nodes: PureNode[]) => {
           type: NodeType.API_SNAPSHOT,
           options: {
             path: rawOptions.api_output_path,
-            format: rawOptions.format,
+            format: Object.values(WriterNodeFormat).includes(rawOptions.format as WriterNodeFormat)
+              ? rawOptions.format as WriterNodeFormat
+              : WriterNodeFormat.PNG,
           },
           collapsed: DEFAULT_COLLAPSED,
         })
