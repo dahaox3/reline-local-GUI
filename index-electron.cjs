@@ -15,6 +15,12 @@ const uvBinaryPath = path.join(uvBinDir, os.platform() === "win32" ? "uv.exe" : 
 const relineForkRepo = "https://github.com/dahaox3/reline.git";
 const relineForkBranch = "main";
 const relineForkPackage = `git+${relineForkRepo}`;
+const torchCudaIndexArgs = [
+    "--index-strategy", "unsafe-best-match",
+    "--index-url", "https://pypi.org/simple",
+    "--extra-index-url", "https://download.pytorch.org/whl/cu126",
+];
+const serverDependencyPackages = ["fastapi", "uvicorn", "python-multipart"];
 
 let currentChild = null;
 let manuallyStopped = false;
@@ -164,7 +170,31 @@ function runCommand(command, args = [], options = {}, onData = () => {}) {
             if (code === 0) resolve(output);
             else reject(new Error(`${command} exited with code ${code}`));
         });
+        child.on("error", reject);
     });
+}
+
+async function installRelinePackages(log, useCuda = false) {
+    const args = ["pip", "install", "--upgrade", "--force-reinstall"];
+    if (useCuda) {
+        args.push(...torchCudaIndexArgs, relineForkPackage, "resselt[cu126]", ...serverDependencyPackages);
+    } else {
+        args.push(relineForkPackage, ...serverDependencyPackages);
+    }
+    await runCommand(uvBinaryPath, args, { cwd: relineDir }, log);
+}
+
+async function ensureServerDependencies(log) {
+    const venvPath = path.join(relineDir, ".venv");
+    const pythonPath = os.platform() === "win32"
+        ? path.join(venvPath, "Scripts", "python.exe")
+        : path.join(venvPath, "bin", "python");
+    try {
+        await runCommand(pythonPath, ["-c", "import fastapi, uvicorn, multipart"], { cwd: relineDir });
+    } catch {
+        log("📦 Installing API service dependencies...\n");
+        await runCommand(uvBinaryPath, ["pip", "install", ...serverDependencyPackages], { cwd: relineDir }, log);
+    }
 }
 
 function requestText(url) {
@@ -504,14 +534,7 @@ ipcMain.handle("install-updates", async (event) => {
     const log = (data) => event.sender.send("pipeline-output", data);
     try {
         log("📦 Updating...");
-        console.log("Installing:", ["pip", "install", "--upgrade", relineForkPackage, "resselt[cu126]"]);
-        await runCommand(uvBinaryPath, [
-            "pip", "install", "--upgrade", "--force-reinstall",
-            "--index-strategy", "unsafe-best-match",
-            "--index-url", "https://pypi.org/simple",
-            "--extra-index-url", "https://download.pytorch.org/whl/cu126",
-            relineForkPackage, "resselt[cu126]"
-        ], { cwd: relineDir }, log);
+        await installRelinePackages(log, hasNvidiaGPU());
         log("✅ Updates installed successfully");
     } catch (err) {
         log(`❌ Error updating packages: ${err.message}`);
@@ -559,7 +582,13 @@ ipcMain.handle("install-dependency", async (event, id) => {
 
         if (id === "reline") {
             log("📦 Installing reline...");
-            await runCommand(uvBinaryPath, [...pipArgs, "--upgrade", "--force-reinstall", relineForkPackage], { cwd: relineDir }, log);
+            await installRelinePackages(log, false);
+            return;
+        }
+
+        if (id === "reline-cuda") {
+            log("📦 Installing reline (CUDA)...");
+            await installRelinePackages(log, true);
             return;
         }
 
@@ -705,10 +734,16 @@ ipcMain.handle("delete-model", async (_event, { folderPath, modelName }) => {
 ipcMain.handle("get-models-list", async () => {
     return new Promise((resolve, reject) => {
         let data = '';
-        const req = https.get('https://mdb.yor.ovh/v1/files', (res) => {
+        const req = https.get('https://mdb.yor.ovh/v1/files', {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+                "Accept": "application/json,text/plain,*/*",
+            },
+        }, (res) => {
             if (res.statusCode !== 200) {
                 console.error(`Failed to fetch models list: status ${res.statusCode}`);
                 reject(new Error(`Failed to fetch models list: status ${res.statusCode}`));
+                res.resume();
                 return;
             }
             res.on('data', (chunk) => {
@@ -735,6 +770,9 @@ ipcMain.handle("get-models-list", async () => {
             } else {
                 reject(err);
             }
+        });
+        req.setTimeout(20000, () => {
+            req.destroy(new Error("Model list request timed out"));
         });
         req.end();
     });
@@ -813,6 +851,10 @@ ipcMain.handle("start-reline-server", async (event, { jsonData, host = "127.0.0.
     if (serverChild) {
         return { started: true, host: serverHost, port: serverPort, alreadyRunning: true };
     }
+
+    const log = (data) => event.sender.send("pipeline-output", data);
+    await ensureUVBinary();
+    await ensureServerDependencies(log);
 
     const configPath = getRelineServerConfigPath();
     const previousContent = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : null;

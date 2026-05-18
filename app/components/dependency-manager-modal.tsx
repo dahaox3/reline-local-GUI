@@ -93,7 +93,9 @@ export function DependencyManagerModal({ open, onClose, onCloseWithCheck }: {
                     ? torchVariant === "cuda"
                         ? "torch-cuda"
                         : "torch"
-                    : dep.id;
+                    : dep.id === "reline" && torchVariant === "cuda"
+                        ? "reline-cuda"
+                        : dep.id;
             await handleInstall(depId);
             await new Promise(resolve => setTimeout(resolve, 1700));
         }
@@ -271,9 +273,13 @@ export function DependencyManagerModal({ open, onClose, onCloseWithCheck }: {
                             key={dep.id}
                             className={cn(
                                 "border rounded-lg p-4 bg-background transition-colors transition-border duration-200 !animate-none",
-                                (installing === dep.id || (dep.id === "torch" && installing === "torch-cuda")) &&
+                                (installing === dep.id ||
+                                    (dep.id === "torch" && installing === "torch-cuda") ||
+                                    (dep.id === "reline" && installing === "reline-cuda")) &&
                                 "!animate-slow-pulse border-yellow-500",
-                                finishedDep === dep.id &&
+                                (finishedDep === dep.id ||
+                                    (dep.id === "torch" && finishedDep === "torch-cuda") ||
+                                    (dep.id === "reline" && finishedDep === "reline-cuda")) &&
                                 "!animate-green-pulse bg-green-100 dark:bg-green-900/30 border-green-500"
                             )}
                         >

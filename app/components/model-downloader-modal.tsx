@@ -17,15 +17,18 @@ export function ModelDownloaderModal({ open, onClose }: { open: boolean; onClose
     const [downloading, setDownloading] = useState<string | null>(null);
     const [progress, setProgress] = useState(0);
     const [isBusy, setIsBusy] = useState(false);
+    const [loadError, setLoadError] = useState("");
 
     useEffect(() => {
         const fetchModels = async () => {
+            setLoadError("");
             try {
                 const list = await window.electronAPI.getModelsList();
                 setModelsList(list);
             } catch (err) {
                 console.error("Failed to fetch models list:", err);
                 setModelsList([]);
+                setLoadError(getErrorMessage(err));
                 if (getErrorMessage(err).includes("No internet connection")) {
                     toast.error("No internet connection. Please check your network and try again.")
                 } else {
@@ -121,7 +124,9 @@ export function ModelDownloaderModal({ open, onClose }: { open: boolean; onClose
                     <ScrollArea className="h-96 w-full rounded-md border">
                         <div className="p-4 space-y-2">
                             {modelsList.length === 0 ? (
-                                <div className="text-muted-foreground text-center">Loading models...</div>
+                                <div className="text-muted-foreground text-center">
+                                    {loadError ? `Failed to load models: ${loadError}` : "Loading models..."}
+                                </div>
                             ) : (
                                 modelsList.map((item) => {
                                     const modelName = item.filename.replace(/\.(tar\.xz|pth|safetensors)$/, "");
