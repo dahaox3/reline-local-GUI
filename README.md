@@ -19,6 +19,8 @@ This fork also adds a local API workflow for use with ComicRead and other client
 - Use `dynamic` reader mode so mixed gray/color image folders can keep their original channel format.
 - Configure automatic color detection in the upscale node, with separate gray/color models and optional high-memory model caching.
 - Add `API Output` and `API Snapshot` nodes for API responses and local snapshot copies.
+- Choose the `API Output` response format (`jpeg` by default, `png` optional) independently from batch writer nodes.
+- Let `folder_reader` skip files that already exist in an output folder, with a folder picker and a `Use writer` shortcut for resumable batch runs.
 - Mark `level` and `screentone` nodes to skip color pages when automatic color detection is enabled.
 - Download/manage models and Reline dependencies from the GUI.
 
