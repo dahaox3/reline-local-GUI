@@ -8,7 +8,7 @@ import { CodeSection } from "~/components/code-section"
 import { NodesSection } from "~/components/nodes-section"
 import { Button } from "~/components/ui/button"
 import {Play, Square, LoaderCircle, Download, Github, Package, Folder, Radio, RefreshCw} from "lucide-react"
-import { nodesToString, cn } from "~/lib/utils"
+import { nodesToString, cn, remapNodeIds } from "~/lib/utils"
 import { Progress } from "~/components/ui/progress"
 import { DependencyManagerModal } from "~/components/dependency-manager-modal"
 import { ModelDownloaderModal } from "~/components/model-downloader-modal";
@@ -85,7 +85,14 @@ export default function HomePage() {
     const getInitialData = () => {
         if (typeof window === "undefined") return DEFAULT_NODES
         const data = localStorage.getItem(STORAGE_KEY)
-        return data ? JSON.parse(data) : DEFAULT_NODES
+        if (!data) return DEFAULT_NODES
+        try {
+            return remapNodeIds(JSON.parse(data))
+        } catch (error) {
+            console.error("Failed to parse saved nodes:", error)
+            localStorage.removeItem(STORAGE_KEY)
+            return DEFAULT_NODES
+        }
     }
 
     const [nodes, dispatch] = useReducer(nodesReducer, getInitialData())

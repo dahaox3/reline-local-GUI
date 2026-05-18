@@ -93,6 +93,9 @@ export function NodeResolver({id, dragListeners, isDragging = false}: {
     }
     const NodeBodyComponent = nodeBodyComponents[data.type]
     const dispatch = useContext(NodesDispatchContext)
+    if (!NodeBodyComponent) {
+        return null
+    }
     const onTypeChange = (value: string) => {
         dispatch({
             type: NodesActionType.CHANGE,

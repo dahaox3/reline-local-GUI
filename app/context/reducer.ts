@@ -2,6 +2,7 @@ import { STORAGE_KEY } from "~/constants"
 import { type NodesAction, NodesActionType } from "~/types/actions"
 import type { StackNode } from "~/types/node"
 import { arrayMove } from "@dnd-kit/sortable"
+import { nextNodeId, remapNodeIds } from "~/lib/utils"
 
 const saveData = (nodes: StackNode[]) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes))
@@ -19,14 +20,14 @@ const processAction = (state: StackNode[], action: NodesAction): StackNode[] => 
         case NodesActionType.CHANGE:
             return state.map((node) => (node.id === payload.id ? payload : node))
         case NodesActionType.ADD:
-            return [...state, payload]
+            return [...state, { ...payload, id: nextNodeId(state) }]
         case NodesActionType.DELETE:
             return state.filter((node) => node.id !== payload)
         case NodesActionType.MOVE: {
             return arrayMove(state, payload.from, payload.to)
         }
         case NodesActionType.IMPORT:
-            return payload
+            return remapNodeIds(payload)
         default:
             return state
     }

@@ -7,6 +7,7 @@ import { NodesContext, NodesDispatchContext } from "~/context/contexts"
 import { DEFAULT_NODE_OPTIONS } from "~/constants"
 import { Button } from "./ui/button"
 import { NodesActionType } from "~/types/actions"
+import { nextNodeId } from "~/lib/utils"
 
 export function AddNodeButton() {
   const [open, setOpen] = useState(false)
@@ -33,7 +34,7 @@ export function AddNodeButton() {
                     dispatch({
                       type: NodesActionType.ADD,
                       payload: {
-                        id: nodes.length,
+                        id: nextNodeId(nodes),
                         type: currentValue as NodeType,
                         options: DEFAULT_NODE_OPTIONS[currentValue as NodeType],
                         collapsed: false,
