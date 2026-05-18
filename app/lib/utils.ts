@@ -19,7 +19,7 @@ export const stringToNodes: (text: string) => StackNode[] = (text) => {
     try {
         pureNodes = JSON.parse(text);
     } catch (error) {
-        toast.error("Error parsing JSON:", error);
+        toast.error(`Error parsing JSON: ${getErrorMessage(error)}`);
         return [];
     }
 
@@ -69,3 +69,13 @@ export function normalizeStackNodes(nodes: unknown): StackNode[] {
 }
 
 const cloneDefaultOptions = (type: NodeType) => JSON.parse(JSON.stringify(DEFAULT_NODE_OPTIONS[type] ?? {}));
+
+export function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    try {
+        return JSON.stringify(error);
+    } catch {
+        return String(error);
+    }
+}

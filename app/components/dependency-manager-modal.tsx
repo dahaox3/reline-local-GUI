@@ -204,7 +204,7 @@ export function DependencyManagerModal({ open, onClose, onCloseWithCheck }: {
                         <Button
                             variant="outline"
                             size="sm"
-                            disabled={isCheckingUpdates || isInstallingUpdates || installing || installingAll || deleting || !installed}
+                            disabled={isCheckingUpdates || isInstallingUpdates || !!installing || installingAll || deleting || !installed}
                             onClick={updateAvailable ? handleInstallUpdates : handleCheckUpdates}
                         >
                             {isCheckingUpdates || isInstallingUpdates ? (

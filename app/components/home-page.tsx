@@ -8,7 +8,7 @@ import { CodeSection } from "~/components/code-section"
 import { NodesSection } from "~/components/nodes-section"
 import { Button } from "~/components/ui/button"
 import {Play, Square, LoaderCircle, Download, Github, Package, Folder, Radio, RefreshCw} from "lucide-react"
-import { nodesToString, cn, remapNodeIds } from "~/lib/utils"
+import { nodesToString, cn, remapNodeIds, getErrorMessage } from "~/lib/utils"
 import { Progress } from "~/components/ui/progress"
 import { DependencyManagerModal } from "~/components/dependency-manager-modal"
 import { ModelDownloaderModal } from "~/components/model-downloader-modal";
@@ -186,7 +186,7 @@ export default function HomePage() {
                     const soundPath = localStorage.getItem("reline_sound_path") || "";
                     const volume = parseInt(localStorage.getItem("reline_sound_volume") || "100", 10);
                     const defaultSoundPath = await window.electronAPI.getDefaultSoundPath();
-                    const audioUrl = soundPath ? `file://${soundPath}` : defaultSoundPath;
+                    const audioUrl = soundPath ? `file://${soundPath}` : defaultSoundPath || undefined;
 
                     if (audioRef.current) {
                         await new Promise(resolve => setTimeout(resolve, 50));
@@ -272,7 +272,7 @@ export default function HomePage() {
             toast.success(`Reline API running on ${result.host}:${result.port}`)
         } catch (err) {
             console.error(err)
-            toast.error("Failed to toggle Reline service")
+            toast.error(getErrorMessage(err) || "Failed to toggle Reline service")
         }
     }
 
@@ -284,7 +284,7 @@ export default function HomePage() {
             toast.success("Reline API config applied")
         } catch (err) {
             console.error(err)
-            toast.error("Failed to apply Reline API config")
+            toast.error(getErrorMessage(err) || "Failed to apply Reline API config")
         }
     }
 

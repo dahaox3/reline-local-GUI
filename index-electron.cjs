@@ -78,14 +78,26 @@ function restoreRelineServerConfig(previousContent) {
     fs.writeFileSync(configPath, previousContent);
 }
 
-async function postRelineServerReload() {
-    const body = await new Promise((resolve, reject) => {
+function formatRelineResponseError(body, statusCode) {
+    if (body) {
+        try {
+            const parsed = JSON.parse(body);
+            if (parsed?.error) return parsed.error;
+        } catch {
+            return body;
+        }
+    }
+    return `Reline API request failed with ${statusCode}`;
+}
+
+async function requestRelineServer(pathname, method = "GET", timeout = 10000) {
+    return new Promise((resolve, reject) => {
         const request = http.request({
             host: serverHost,
             port: serverPort,
-            path: "/reload",
-            method: "POST",
-            timeout: 10000,
+            path: pathname,
+            method,
+            timeout,
         }, (response) => {
             let data = "";
             response.setEncoding("utf8");
@@ -94,19 +106,46 @@ async function postRelineServerReload() {
             });
             response.on("end", () => {
                 if (response.statusCode < 200 || response.statusCode >= 300) {
-                    reject(new Error(data || `Reline API reload failed with ${response.statusCode}`));
+                    reject(new Error(formatRelineResponseError(data, response.statusCode)));
                     return;
                 }
                 resolve(data);
             });
         });
         request.on("timeout", () => {
-            request.destroy(new Error("Reline API reload timed out"));
+            request.destroy(new Error("Reline API request timed out"));
         });
         request.on("error", reject);
         request.end();
     });
+}
+
+async function postRelineServerReload() {
+    const body = await requestRelineServer("/reload", "POST", 10000);
     return body ? JSON.parse(body) : { reloaded: true };
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForRelineServerReady(child, getOutput, timeout = 10000) {
+    const startedAt = Date.now();
+    let lastError = null;
+
+    while (Date.now() - startedAt < timeout) {
+        if (child.exitCode !== null) {
+            throw new Error(getOutput() || `Reline API exited with code ${child.exitCode}`);
+        }
+
+        try {
+            await requestRelineServer("/status", "GET", 1000);
+            return;
+        } catch (error) {
+            lastError = error;
+            await sleep(200);
+        }
+    }
+
+    throw new Error(getOutput() || lastError?.message || "Reline API did not start in time");
 }
 
 function runCommand(command, args = [], options = {}, onData = () => {}) {
@@ -775,6 +814,8 @@ ipcMain.handle("start-reline-server", async (event, { jsonData, host = "127.0.0.
         return { started: true, host: serverHost, port: serverPort, alreadyRunning: true };
     }
 
+    const configPath = getRelineServerConfigPath();
+    const previousContent = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : null;
     writeRelineServerConfig(jsonData);
 
     const venvPath = path.join(relineDir, ".venv");
@@ -785,26 +826,45 @@ ipcMain.handle("start-reline-server", async (event, { jsonData, host = "127.0.0.
     serverHost = String(host || "127.0.0.1");
     serverPort = Number(port) || 5678;
 
-    serverChild = spawn(pythonPath, [scriptPath, "--host", serverHost, "--port", String(serverPort)], {
+    const child = spawn(pythonPath, [scriptPath, "--host", serverHost, "--port", String(serverPort)], {
         cwd: relineDir,
         windowsHide: true,
         shell: false,
     });
+    serverChild = child;
+    let serverOutput = "";
 
-    serverChild.stdout.on("data", (d) => event.sender.send("pipeline-output", d.toString()));
-    serverChild.stderr.on("data", (d) => event.sender.send("pipeline-output", d.toString()));
-    serverChild.on("close", (code) => {
+    child.stdout.on("data", (d) => {
+        serverOutput += d.toString();
+        event.sender.send("pipeline-output", d.toString());
+    });
+    child.stderr.on("data", (d) => {
+        serverOutput += d.toString();
+        event.sender.send("pipeline-output", d.toString());
+    });
+    child.on("close", (code) => {
         console.log("Reline server closed, code:", code);
         event.sender.send("reline-server-end", { code });
-        serverChild = null;
+        if (serverChild === child) serverChild = null;
     });
 
-    return { started: true, host: serverHost, port: serverPort };
+    try {
+        await waitForRelineServerReady(child, () => serverOutput.trim());
+        const reloadResult = await postRelineServerReload();
+        return { started: true, host: serverHost, port: serverPort, ...reloadResult };
+    } catch (error) {
+        restoreRelineServerConfig(previousContent);
+        if (serverChild === child) {
+            child.kill("SIGTERM");
+            serverChild = null;
+        }
+        throw error;
+    }
 });
 
 ipcMain.handle("reload-reline-server", async (_event, { jsonData }) => {
     if (!serverChild) {
-        return { reloaded: false, running: false };
+        throw new Error("Reline API service is not running");
     }
     const configPath = getRelineServerConfigPath();
     const previousContent = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : null;

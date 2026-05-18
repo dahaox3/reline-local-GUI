@@ -21,6 +21,8 @@ declare global {
 
             // === Installations ===
             installDependency: (id: string) => Promise<void>;
+            checkForUpdates: () => Promise<{ updatesAvailable: boolean }>;
+            installUpdates: () => Promise<void>;
 
             // === GPU ===
             checkGPU: () => Promise<boolean>;
@@ -43,6 +45,7 @@ declare global {
                 filename: string;
                 targetDir: string;
             }) => Promise<boolean>;
+            getModelsList: () => Promise<{ filename: string; url: string }[]>;
             deleteModel: (args: {
                 folderPath: string;
                 modelName: string;
@@ -82,7 +85,7 @@ declare global {
             ) => void;
             onDownloadProgress: (
                 cb: (data: { filename: string; progress: number }) => void
-            ) => void;
+            ) => () => void;
             removeListener: (channel: string, cb?: (...args: any[]) => void) => void;
 
             // === Other ===

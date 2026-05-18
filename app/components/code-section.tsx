@@ -171,6 +171,10 @@ export function CodeSection() {
     const handleSelectConfig = (value: string) => {
         const fullPath = `${folderPath}/${value}`
         window.electronAPI.readJsonFile(fullPath).then((text) => {
+            if (text === null) {
+                toast.error("Failed to read config file")
+                return
+            }
             const parsedNodes = stringToNodes(text);
             const migratedNodes = migrateNodes(parsedNodes);
             const remappedNodes = remapNodeIds(migratedNodes);
@@ -186,6 +190,10 @@ export function CodeSection() {
         const result = await window.electronAPI.selectJsonFile()
         if (result) {
             const text = await window.electronAPI.readJsonFile(result)
+            if (text === null) {
+                toast.error("Failed to read config file")
+                return
+            }
             const parsedNodes = stringToNodes(text);
             const migratedNodes = migrateNodes(parsedNodes);
             const remappedNodes = remapNodeIds(migratedNodes);
@@ -237,7 +245,7 @@ export function CodeSection() {
         }
 
         const defaultSoundPath = await window.electronAPI.getDefaultSoundPath();
-        const soundSrc = soundPath ? `file://${soundPath}` : defaultSoundPath;
+        const soundSrc = soundPath ? `file://${soundPath}` : defaultSoundPath || undefined;
         const audio = new Audio(soundSrc);
         audio.volume = volume / 100;
         audio.play().catch((err) => console.error("Audio play error:", err));
@@ -315,7 +323,7 @@ export function CodeSection() {
                                         <Checkbox
                                             id="play-sound"
                                             checked={soundEnabled}
-                                            onCheckedChange={setSoundEnabled}
+                                            onCheckedChange={(checked) => setSoundEnabled(checked === true)}
                                         />
                                         <Label htmlFor="play-sound">Play sound at the end</Label>
                                     </div>

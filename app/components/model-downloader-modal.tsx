@@ -6,7 +6,7 @@ import {ScrollArea} from "~/components/ui/scroll-area";
 import {Progress} from "~/components/ui/progress";
 import {Input} from "~/components/ui/input";
 import {useModels, useSetModels} from "~/context/model-provider";
-import {cn} from "~/lib/utils";
+import {cn, getErrorMessage} from "~/lib/utils";
 import { ToastProvider, ToastViewport } from "~/components/ui/toast";
 import {toast} from "sonner";
 
@@ -26,7 +26,7 @@ export function ModelDownloaderModal({ open, onClose }: { open: boolean; onClose
             } catch (err) {
                 console.error("Failed to fetch models list:", err);
                 setModelsList([]);
-                if (err.message.includes("No internet connection")) {
+                if (getErrorMessage(err).includes("No internet connection")) {
                     toast.error("No internet connection. Please check your network and try again.")
                 } else {
                     toast.error("Failed to load models list. Please try again later.")
