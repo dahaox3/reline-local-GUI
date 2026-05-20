@@ -355,6 +355,38 @@ export function UpscaleNodeBody({id}: { id: number }) {
             )}
 
             <div className="flex flex-col gap-2">
+                <Label>Target scale</Label>
+                <div className="flex items-center gap-2">
+                    <Input
+                        type="number"
+                        className="w-[180px]"
+                        min={1}
+                        step={1}
+                        value={options.target_scale ?? ""}
+                        placeholder="Use model scale"
+                        onChange={(e) => {
+                            const raw = e.target.value.trim()
+                            changeValue({
+                                target_scale: raw ? Number.parseInt(raw) : undefined,
+                            })
+                        }}
+                    />
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        type="button"
+                        title="Clear target scale"
+                        onClick={() => changeValue({target_scale: undefined})}
+                    >
+                        <X/>
+                    </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Leave empty to use the model's native upscale factor.
+                </p>
+            </div>
+
+            <div className="flex flex-col gap-2">
                 <Label>DType</Label>
                 <Select onValueChange={(value: DType) => changeValue({dtype: value})} value={options.dtype}>
                     <SelectTrigger className="w-[180px]">

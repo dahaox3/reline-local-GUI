@@ -32,6 +32,7 @@ export const convertUpscaleToPure: ConvertToPureFunction = (nodes, index) => {
       type: PureNodeType.UPSCALE,
       options: {
         model: rawModel,
+        target_scale: options.target_scale,
         color_model: resolvedColorModel,
         gray_model: resolvedGrayModel,
         ...options,
@@ -43,6 +44,7 @@ export const convertUpscaleToPure: ConvertToPureFunction = (nodes, index) => {
       type: PureNodeType.UPSCALE,
       options: {
         model: modelPath,
+        target_scale: options.target_scale,
         color_model: resolvedColorModel,
         gray_model: resolvedGrayModel,
         ...options,
@@ -62,6 +64,7 @@ export const convertUpscaleToStack: ConvertToStackFunction = (nodes, index) => {
         type: NodeType.UPSCALE,
         options: {
           ...options,
+          target_scale: options.target_scale ?? undefined,
           auto_detect_color: options.auto_detect_color ?? false,
           color_model: options.color_model ?? "",
           gray_model: options.gray_model ?? "",

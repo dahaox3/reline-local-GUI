@@ -4,6 +4,7 @@ import { ColorDetectMode, DType, ModelCacheMode, TilerType } from "~/types/enums
 export const UpscaleOptionsSchema = z.object({
   is_own_model: z.boolean(),
   model: z.string(),
+  target_scale: z.number().optional(),
   dtype: z.nativeEnum(DType),
   tiler: z.nativeEnum(TilerType),
   exact_tiler_size: z.number(),

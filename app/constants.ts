@@ -77,6 +77,7 @@ export const DEFAULT_NODE_OPTIONS: {
   upscale: {
     is_own_model: false,
     model: DEFAULT_MODEL,
+    target_scale: undefined,
     dtype: DType.F32,
     tiler: TilerType.EXACT,
     exact_tiler_size: DEFAULT_TILE_SIZE,
