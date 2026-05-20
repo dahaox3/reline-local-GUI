@@ -94,7 +94,6 @@ export function migrateNodes(nodes: StackNode[]): StackNode[] {
                 options: {
                     ...options,
                     model: modelPath,
-                    target_scale: options.target_scale ?? undefined,
                     is_own_model: isOwn,
                     dtype: dtypeValue,
                     auto_detect_color: options.auto_detect_color ?? false,
