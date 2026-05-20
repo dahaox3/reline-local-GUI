@@ -116,8 +116,8 @@ status = {
 }
 
 cached_config: list[dict[str, Any]] | None = None
-cached_upscale_index: int | None = None
-upscale_node: UpscaleNode | None = None
+cached_upscale_indexes: list[int] | None = None
+upscale_nodes: dict[int, UpscaleNode] = {}
 
 
 class ConfigError(ValueError):
@@ -150,7 +150,7 @@ def find_node_index(config: list[dict[str, Any]], node_type: str) -> int | None:
     return None
 
 
-def validate_server_config(config: list[dict[str, Any]]) -> int:
+def validate_server_config(config: list[dict[str, Any]]) -> list[int]:
     reader_index = find_node_index(config, 'folder_reader')
     writer_index = find_node_index(config, 'folder_writer')
     upscale_indexes = [i for i, node in enumerate(config) if node.get('type') == 'upscale']
@@ -161,14 +161,13 @@ def validate_server_config(config: list[dict[str, Any]]) -> int:
         raise ConfigError('Server config requires a folder_writer node or an api_output node')
     if not upscale_indexes:
         raise ConfigError('Server config requires an upscale node')
-    if len(upscale_indexes) > 1:
-        raise ConfigError('Server mode does not support multiple upscale nodes')
     if len(api_output_indexes) > 1:
         raise ConfigError('Server mode does not support multiple api_output nodes')
-    upscale_index = upscale_indexes[0]
-    if not reader_index < upscale_index:
+    first_upscale_index = upscale_indexes[0]
+    last_upscale_index = upscale_indexes[-1]
+    if not reader_index < first_upscale_index:
         raise ConfigError('Server config requires folder_reader before upscale')
-    if writer_index is not None and not reader_index < upscale_index < writer_index:
+    if writer_index is not None and not (reader_index < first_upscale_index and last_upscale_index < writer_index):
         raise ConfigError('Server config requires folder_reader -> upscale -> folder_writer order')
     for index in api_output_indexes:
         if index <= reader_index:
@@ -178,8 +177,9 @@ def validate_server_config(config: list[dict[str, Any]]) -> int:
             raise ConfigError('snapshot_writer must be after folder_reader')
     if writer_index is not None and writer_index < len(config) - 1:
         logger.warning('folder_writer is before later nodes; server mode will run those nodes before writing output')
-    validate_upscale_models(config[upscale_index])
-    return upscale_index
+    for upscale_index in upscale_indexes:
+        validate_upscale_models(config[upscale_index])
+    return upscale_indexes
 
 
 def validate_upscale_models(upscale_node_data: dict[str, Any]) -> None:
@@ -191,10 +191,6 @@ def validate_upscale_models(upscale_node_data: dict[str, Any]) -> None:
         for key in model_fields
         if options.get(key)
     }
-    if auto_detect_color and not configured_models:
-        raise ConfigError('Upscale node requires at least one model, gray_model, or color_model')
-    if not auto_detect_color and not configured_models.get('model'):
-        raise ConfigError('Upscale node requires a model')
 
     missing = []
     for key, model in configured_models.items():
@@ -315,47 +311,47 @@ def create_upscale_node(config: list[dict[str, Any]], upscale_index: int) -> Ups
     return node
 
 
-def dispose_upscale_node() -> None:
-    global upscale_node
-    node = upscale_node
-    upscale_node = None
-    if node is None:
+def dispose_upscale_nodes() -> None:
+    global upscale_nodes
+    nodes = list(upscale_nodes.values())
+    upscale_nodes = {}
+    if not nodes:
         return
     try:
-        if getattr(node, 'model', None) is not None:
-            del node.model
-            node.model = None
-        if getattr(node, 'model_cache', None) is not None:
-            node.model_cache.clear()
+        for node in nodes:
+            if getattr(node, 'model', None) is not None:
+                del node.model
+                node.model = None
+            if getattr(node, 'model_cache', None) is not None:
+                node.model_cache.clear()
     finally:
         gc.collect()
         empty_cuda_cache()
 
 
 def reload_config_state() -> dict[str, Any]:
-    global cached_config, cached_upscale_index
+    global cached_config, cached_upscale_indexes
     config = normalize_server_config(load_config())
-    upscale_index = validate_server_config(config)
-    dispose_upscale_node()
+    upscale_indexes = validate_server_config(config)
+    dispose_upscale_nodes()
     cached_config = config
-    cached_upscale_index = upscale_index
+    cached_upscale_indexes = upscale_indexes
     return {'reloaded': True, 'models': model_names_from_config(config)}
 
 
-def ensure_config_state() -> tuple[list[dict[str, Any]], int]:
-    global cached_config, cached_upscale_index
-    if cached_config is None or cached_upscale_index is None:
+def ensure_config_state() -> tuple[list[dict[str, Any]], list[int]]:
+    global cached_config, cached_upscale_indexes
+    if cached_config is None or cached_upscale_indexes is None:
         config = normalize_server_config(load_config())
-        cached_upscale_index = validate_server_config(config)
+        cached_upscale_indexes = validate_server_config(config)
         cached_config = config
-    return cached_config, cached_upscale_index
+    return cached_config, cached_upscale_indexes
 
 
 def ensure_upscale_node(config: list[dict[str, Any]], upscale_index: int) -> UpscaleNode:
-    global upscale_node
-    if upscale_node is None:
-        upscale_node = create_upscale_node(config, upscale_index)
-    return upscale_node
+    if upscale_index not in upscale_nodes:
+        upscale_nodes[upscale_index] = create_upscale_node(config, upscale_index)
+    return upscale_nodes[upscale_index]
 
 
 def model_names_from_config(config: list[dict[str, Any]]) -> list[str]:
@@ -403,10 +399,14 @@ def media_type_for(path: Path) -> str:
     return 'image/png'
 
 
-def collect_result(img: ImageFile | None, node: UpscaleNode) -> dict[str, Any]:
+def collect_result(img: ImageFile | None, nodes: list[UpscaleNode]) -> dict[str, Any]:
+    model_used = None
+    for node in nodes:
+        if getattr(node, 'last_model_path', None):
+            model_used = node.last_model_path
     result = {
         'detected_color': None,
-        'model_used': getattr(node, 'last_model_path', None),
+        'model_used': model_used,
         'skipped_nodes': [],
     }
     if img is not None:
@@ -439,16 +439,23 @@ def write_output_image(
 
 def run_single_image(
     config: list[dict[str, Any]],
-    upscale_index: int,
+    upscale_indexes: list[int],
     input_dir: Path,
     output_dir: Path,
     color_detect_mode: str | None,
 ) -> dict[str, Any]:
     request_config = patch_request_config(config, input_dir, output_dir, color_detect_mode)
-    node = ensure_upscale_node(config, upscale_index)
-    old_upscale_options = node.options
+    upscale_node_map = {
+        index: ensure_upscale_node(config, index)
+        for index in upscale_indexes
+    }
+    old_upscale_options = {
+        index: node.options
+        for index, node in upscale_node_map.items()
+    }
     if color_detect_mode:
-        node.update_options(replace(node.options, color_detect_mode=color_detect_mode))
+        for node in upscale_node_map.values():
+            node.update_options(replace(node.options, color_detect_mode=color_detect_mode))
     img: ImageFile | None = None
     api_output_img: ImageFile | None = None
     api_output_format: str | None = None
@@ -457,9 +464,10 @@ def run_single_image(
     try:
         for i, node_data in enumerate(request_config):
             node_type = node_data.get('type')
-            if i == upscale_index:
+            if i in upscale_node_map:
                 if img is None:
                     raise ConfigError('Upscale node did not receive an image')
+                node = upscale_node_map[i]
                 img = node.single_process(img)
                 if img is None:
                     raise RuntimeError('Upscale node skipped the image')
@@ -499,12 +507,13 @@ def run_single_image(
         if output_img is None:
             raise ConfigError('Writer node did not receive an image')
         output_path = write_output_image(output_img, writer_node, output_dir, api_output_format if api_output_img is not None else None)
-        result = collect_result(img, node)
+        result = collect_result(img, [upscale_node_map[index] for index in upscale_indexes])
         result['output_path'] = str(output_path)
         return result
     finally:
-        if node.options is not old_upscale_options:
-            node.update_options(old_upscale_options)
+        for index, node in upscale_node_map.items():
+            if node.options is not old_upscale_options[index]:
+                node.update_options(old_upscale_options[index])
 
 
 @app.get('/status')
@@ -552,11 +561,11 @@ async def upscale(file: UploadFile = File(...), color_detect_mode: str | None = 
                 shutil.copyfileobj(file.file, out)
 
             async with node_lock:
-                config, upscale_index = ensure_config_state()
+                config, upscale_indexes = ensure_config_state()
                 result = await asyncio.to_thread(
                     run_single_image,
                     config,
-                    upscale_index,
+                    upscale_indexes,
                     input_dir,
                     output_dir,
                     color_detect_mode,
@@ -596,7 +605,7 @@ async def upscale(file: UploadFile = File(...), color_detect_mode: str | None = 
 
 @app.on_event('shutdown')
 def on_shutdown():
-    dispose_upscale_node()
+    dispose_upscale_nodes()
 
 
 def main():

@@ -6,7 +6,7 @@ import {Label} from "../ui/label"
 import {DEFAULT_MODEL, DEFAULT_TILE_SIZE} from "~/constants"
 import {Popover, PopoverContent, PopoverTrigger} from "../ui/popover"
 import {Button} from "../ui/button"
-import {Check, ChevronsUpDown} from "lucide-react"
+import {Check, ChevronsUpDown, File, FolderOpen, X} from "lucide-react"
 import {Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList} from "../ui/command"
 import {cn} from "~/lib/utils"
 import {Input} from "../ui/input"
@@ -14,7 +14,6 @@ import {Checkbox} from "../ui/checkbox"
 import {Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue} from "../ui/select"
 import type {UpscaleNodeOptions} from "~/types/options"
 import {NodesActionType} from "~/types/actions"
-import {FolderOpen, File} from "lucide-react"
 
 
 function Combobox({value, onChange, placeholder = "Select model"}: { value: string; onChange: (value: string) => void; placeholder?: string }) {
@@ -87,9 +86,6 @@ export function UpscaleNodeBody({id}: { id: number }) {
         if (!options.auto_detect_color && options.model === "select folder" && models.length > 0 && !options.is_own_model) {
             changeValue({model: models[0]});
         }
-        if (options.auto_detect_color && !options.gray_model && models.length > 0) {
-            changeValue({gray_model: options.model && options.model !== DEFAULT_MODEL ? options.model : models[0]});
-        }
     }, [models, options.model, options.is_own_model, options.auto_detect_color, options.gray_model]);
 
 
@@ -98,9 +94,7 @@ export function UpscaleNodeBody({id}: { id: number }) {
         if (result && Array.isArray(result.models)) {
             setModels({folderPath: result.folderPath, models: result.models});
             const defaultModel = result.models[0] || "select folder";
-            if (options.auto_detect_color) {
-                changeValue({gray_model: options.gray_model || defaultModel});
-            } else {
+            if (!options.auto_detect_color) {
                 changeValue({model: defaultModel});
             }
         }
@@ -133,10 +127,9 @@ export function UpscaleNodeBody({id}: { id: number }) {
                     checked={!!options.auto_detect_color}
                     onCheckedChange={(value) => {
                         const enabled = !!value;
-                        const grayModel = options.gray_model || (options.model && options.model !== DEFAULT_MODEL ? options.model : models[0] || "");
                         changeValue({
                             auto_detect_color: enabled,
-                            gray_model: enabled ? grayModel : options.gray_model,
+                            gray_model: options.gray_model,
                             color_model: options.color_model || "",
                             color_detect_mode: options.color_detect_mode || ColorDetectMode.AUTO,
                             model_cache_mode: options.model_cache_mode || ModelCacheMode.LOW_MEMORY,
@@ -214,7 +207,19 @@ export function UpscaleNodeBody({id}: { id: number }) {
                                 >
                                     <FolderOpen/>
                                 </Button>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    type="button"
+                                    title="Clear gray model"
+                                    onClick={() => changeValue({gray_model: ""})}
+                                >
+                                    <X/>
+                                </Button>
                             </div>
+                            <p className="text-xs text-muted-foreground">
+                                Leave empty to let gray pages pass through this upscale node.
+                            </p>
                         </div>
 
                         <div className="flex flex-col gap-2">
@@ -222,7 +227,7 @@ export function UpscaleNodeBody({id}: { id: number }) {
                             <div className="flex items-center gap-2">
                                 <Combobox
                                     value={options.color_model || ""}
-                                    placeholder="Use fallback model"
+                                    placeholder="Select color model"
                                     onChange={(model) => {
                                         changeValue({color_model: model});
                                     }}
@@ -236,7 +241,19 @@ export function UpscaleNodeBody({id}: { id: number }) {
                                 >
                                     <FolderOpen/>
                                 </Button>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    type="button"
+                                    title="Clear color model"
+                                    onClick={() => changeValue({color_model: ""})}
+                                >
+                                    <X/>
+                                </Button>
                             </div>
+                            <p className="text-xs text-muted-foreground">
+                                Leave empty to let color pages pass through this upscale node.
+                            </p>
                         </div>
                     </div>
                 ) : (
